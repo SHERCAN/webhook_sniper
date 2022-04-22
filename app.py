@@ -56,7 +56,7 @@ class Ordenes:
             symbol=self.cliente.base['symbol'],
             side=position,
             type='MARKET',
-            quantity=str((balance*30)/float(
+            quantity=str((balance*self.cliente.base['leverage'])/float(
                 self.cliente.client.futures_symbol_ticker(
                     symbol=self.cliente.base['symbol'])['price']))[0:5]
         )
