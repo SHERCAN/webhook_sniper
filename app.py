@@ -10,7 +10,6 @@ from flask import Flask, request, render_template
 
 # clase cliente
 
-
 class Cliente:
     def __init__(self, symbol: str) -> None:
         with open('data.json') as json_file:
@@ -23,7 +22,6 @@ class Cliente:
         self.base = symbols[symbol]
 
 # ordenes de compra y venta
-
 
 class Mensaje:
 
@@ -44,21 +42,26 @@ class Ordenes:
     def create_order(self, position: str):
         balance = self.cliente.client.futures_account_balance()
         balance = float([x['balance']
-                        for x in balance if x['asset'] == 'USDT'][0])/2
-    # print(balance)
+                        for x in balance if x['asset'] == 'USDT'][0])/6
         try:
             self.cliente.client.futures_cancel_all_open_orders(
                 symbol=self.cliente.base['symbol'])
+
         except:
             pass
-        print("Llego a crear la orden de compra en market")
+        if self.cliente.base['id'] == 0:
+            quantity_n = str((balance*self.cliente.base['leverage'])/float(
+                self.cliente.client.futures_symbol_ticker(
+                    symbol=self.cliente.base['symbol'])['price']))[0:self.cliente.base["accuracy"]]
+        else:
+            quantity_n = str(2*(balance*self.cliente.base['leverage'])/float(
+                self.cliente.client.futures_symbol_ticker(
+                    symbol=self.cliente.base['symbol'])['price']))[0:self.cliente.base["accuracy"]]
         order = self.cliente.client.futures_create_order(
             symbol=self.cliente.base['symbol'],
             side=position,
             type='MARKET',
-            quantity=str((balance*self.cliente.base['leverage'])/float(
-                self.cliente.client.futures_symbol_ticker(
-                    symbol=self.cliente.base['symbol'])['price']))[0:5]
+            quantity=quantity_n
         )
         self.cliente.base['side'] = position
         self.cliente.base['quantity'] = order['origQty']
@@ -68,6 +71,7 @@ class Ordenes:
                            args=(self.cliente.base['id'], 'create',))
         order_exe.start()
         # print(order)
+# creación del stop loss
 
     def stop_loss(self, position: str):
         # print(position)
@@ -98,6 +102,7 @@ class Ordenes:
                            args=(stop['orderId'], 'stop',))
         order_exe.start()
         return price
+# creación del take profit
 
     def take_profit(self, position: str):
         if position == 'BUY':
@@ -126,6 +131,7 @@ class Ordenes:
                            args=(take['orderId'], 'take',))
         order_exe.start()
         return price
+# seguimiento de las ordenes
 
     def create_order_exe(self, order_id, intro: str):
         while True:
@@ -134,35 +140,36 @@ class Ordenes:
             print(intro, order['status'], order['orderId'])
             if (order['status'] == 'FILLED' and intro == 'create'):
                 self.cliente.base['price'] = order['avgPrice']
-                print('Entro a crear las ordenes de stop y take')
                 price_stop = self.stop_loss(self.cliente.base['side'])
                 price_take = self.take_profit(self.cliente.base['side'])
-                self.message.send('El precio de compra fue '+str(self.cliente.base["price"])+' el precio del stop es '+str(
+                self.message.send('Se compro '+self.cliente.base['symbol']+' el precio de compra fue '+str(self.cliente.base["price"])+' el precio del stop es '+str(
                     price_stop)+' y el precio del take es de '+str(price_take))
                 break
             if ((order['status'] == 'FILLED' and intro == 'stop') or
                     intro == 'stop' and order['status'] == 'CANCELED'):
                 self.cliente.client.futures_cancel_all_open_orders(
                     symbol=self.cliente.base['symbol'])
+                self.cliente.base['id'] = 0
+                self.message.send('Se tomo el stop loss de ' +
+                                  self.cliente.base['symbol'])
                 break
             if ((order['status'] == 'FILLED' and intro == 'take') or
                     intro == 'take' and order['status'] == 'CANCELED'):
                 self.cliente.client.futures_cancel_all_open_orders(
                     self.cliente.base['symbol'])
+                self.cliente.base['id'] = 0
+                self.message.send('Se tomo el take profit de ' +
+                                  self.cliente.base['symbol'])
                 break
             sleep(1)
 
-    def prueba(self):
-        print('Entro bien')
-
-
 # inicio de programa
 if __name__ == "__main__":
+    from waitress import serve
     app = Flask(__name__)
 
     @app.route('/')
     def main():
-        print("Llegaste")
         return render_template('main.html')
 
     @app.route('/webhook', methods=['POST'])
@@ -171,18 +178,16 @@ if __name__ == "__main__":
         if request.method == 'POST':
             recive = request.json
             if recive['position'] == '1' and recive['order'] == 'buy':
-                print('long')
                 orders = Ordenes(recive['ticker'])
                 orders.create_order('BUY')
                 mensaje = 'Se realizo una orden en long'
             elif recive['position'] == '-1' and recive['order'] == 'sell':
-                print('short')
                 orders = Ordenes(recive['ticker'])
                 orders.create_order('SELL')
                 mensaje = 'Se realizo una orden en short'
             return mensaje
     #app.run(host='127.0.0.1', port=80)
-    app.run(host='0.0.0.0', port=80)
+    serve(app, host='0.0.0.0', port=80)
 # ----------json recepción
 '''
 Envio del dato desde el cliente, de esta manera
