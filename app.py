@@ -36,8 +36,9 @@ class Mensaje:
 
 
 class Ordenes:
-    simbolos=['BTCUSDT','XRPUSDT','ETHUSDT','BNBUSDT','SOLUSDT']
-    cap_div=1
+    simbolos = ['BTCUSDT', 'XRPUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT']
+    cap_div = 1
+
     def __init__(self, symbol: str) -> None:
         self.cliente = Cliente(symbol.replace('PERP', ''))
         self.message = Mensaje()
@@ -45,11 +46,12 @@ class Ordenes:
     def create_order(self, position: str):
         balance = self.cliente.client.futures_account_balance()
         for i in self.simbolos:
-            posiciones_o=float(self.cliente.client.futures_position_information(symbol=i)[0]['positionAmt'])
+            posiciones_o = float(self.cliente.client.futures_position_information(
+                symbol=i)[0]['positionAmt'])
             if posiciones_o != 0.0:
-                self.cap_div-=1
+                self.cap_div -= 1
             else:
-                self.cap_div+=1
+                self.cap_div += 1
         balance = float([x['balance']
                         for x in balance if x['asset'] == 'USDT'][0])/self.cap_div
         try:
@@ -86,16 +88,12 @@ class Ordenes:
         # print(position)
         if position == 'BUY':
             pos = 'SELL'
-            stop = round(
-                float(self.cliente.base['price'])*(1.002-self.cliente.base['stop']), self.cliente.base["round"])
-            price = round(
-                float(self.cliente.base['price'])*(1-self.cliente.base['stop']), self.cliente.base["round"])
+            stop = round(self.cliente.base['price']*(1.002-self.cliente.base['stop']), self.cliente.base["round"])
+            price = round(self.cliente.base['price']*(1-self.cliente.base['stop']), self.cliente.base["round"])
         elif position == 'SELL':
             pos = 'BUY'
-            stop = round(
-                float(self.cliente.base['price'])*(0.998+self.cliente.base['stop']), self.cliente.base["round"])
-            price = round(
-                float(self.cliente.base['price'])*(1+self.cliente.base['stop']), self.cliente.base["round"])
+            stop = round(self.cliente.base['price']*(0.998+self.cliente.base['stop']), self.cliente.base["round"])
+            price = round(self.cliente.base['price']*(1+self.cliente.base['stop']), self.cliente.base["round"])
         # print(stop,price,pos,base)
         stop = self.cliente.client.futures_create_order(
             symbol=self.cliente.base['symbol'],
@@ -116,16 +114,12 @@ class Ordenes:
     def take_profit(self, position: str):
         if position == 'BUY':
             pos = 'SELL'
-            stop = round(
-                float(self.cliente.base['price'])*(0.998+self.cliente.base['take_l']), self.cliente.base["round"])
-            price = round(
-                float(self.cliente.base['price'])*(1+self.cliente.base['take_l']), self.cliente.base["round"])
+            stop = round(self.cliente.base['price']*(0.998+self.cliente.base['take_l']), self.cliente.base["round"])
+            price = round(self.cliente.base['price']*(1+self.cliente.base['take_l']), self.cliente.base["round"])
         elif position == 'SELL':
             pos = 'BUY'
-            stop = round(
-                float(self.cliente.base['price'])*(1.002-self.cliente.base['take_s']), self.cliente.base["round"])
-            price = round(
-                float(self.cliente.base['price'])*(1-self.cliente.base['take_s']), self.cliente.base["round"])
+            stop = round(self.cliente.base['price']*(1.002-self.cliente.base['take_s']), self.cliente.base["round"])
+            price = round(self.cliente.base['price']*(1-self.cliente.base['take_s']), self.cliente.base["round"])
         take = self.cliente.client.futures_create_order(
             symbol=self.cliente.base['symbol'],
             side=pos,
@@ -146,12 +140,13 @@ class Ordenes:
         while True:
             order = self.cliente.client.futures_get_order(
                 orderId=order_id, symbol=self.cliente.base['symbol'])
-            print(intro, order['status'], order['orderId'])
+            #print(intro, order['status'], order['orderId'])
             if (order['status'] == 'FILLED' and intro == 'create'):
-                self.cliente.base['price'] = order['avgPrice']
+                self.cliente.base['price'] = float(order['avgPrice'])
                 price_stop = self.stop_loss(self.cliente.base['side'])
                 price_take = self.take_profit(self.cliente.base['side'])
-                self.message.send('Se compro '+self.cliente.base['symbol']+' el precio de compra fue '+str(self.cliente.base["price"])+' el precio del stop es '+str(
+                self.message.send('Se compro '+self.cliente.base['symbol']+' el precio de compra fue ' +
+                                  str(self.cliente.base["price"])+' el precio del stop es '+str(
                     price_stop)+' y el precio del take es de '+str(price_take))
                 break
             if ((order['status'] == 'FILLED' and intro == 'stop') or
@@ -165,7 +160,7 @@ class Ordenes:
             if ((order['status'] == 'FILLED' and intro == 'take') or
                     intro == 'take' and order['status'] == 'CANCELED'):
                 self.cliente.client.futures_cancel_all_open_orders(
-                    self.cliente.base['symbol'])
+                    symbol=self.cliente.base['symbol'])
                 self.cliente.base['id'] = 0
                 self.message.send('Se tomo el take profit de ' +
                                   self.cliente.base['symbol'])
@@ -176,6 +171,7 @@ class Ordenes:
 # inicio de programa
 if __name__ == "__main__":
     from waitress import serve
+    print('Inicio')
     app = Flask(__name__)
 
     @app.route('/')
