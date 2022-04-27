@@ -145,7 +145,7 @@ class Ordenes:
             #print(intro, order['status'], order['orderId'])
             if (order['status'] == 'FILLED' and intro == 'create'):
                 self.cliente.base['price'] = float(order['avgPrice'])
-                self.cliente.base['quote'] = float(order['cumQuote'])
+                self.cliente.base['quote'] = float(order['cumQuote'])*0.9996
                 price_stop = self.stop_loss(self.cliente.base['side'])
                 price_take = self.take_profit(self.cliente.base['side'])
                 self.message.send('Se compro '+self.cliente.base['symbol']+' el precio de compra fue ' +
@@ -158,7 +158,7 @@ class Ordenes:
                         self.cliente.base['quote']
                 else:
                     balance += self.cliente.base['quote'] - \
-                        float(order['cumQuote'])
+                        float(order['cumQuote'])*0.9998
                 self.cliente.client.futures_cancel_all_open_orders(
                     symbol=self.cliente.base['symbol'])
                 self.cliente.base['id'] = 0
@@ -171,7 +171,7 @@ class Ordenes:
                         self.cliente.base['quote']
                 else:
                     balance += self.cliente.base['quote'] - \
-                        float(order['cumQuote'])
+                        float(order['cumQuote'])*0.9998
                 self.cliente.client.futures_cancel_all_open_orders(
                     symbol=self.cliente.base['symbol'])
                 self.cliente.base['id'] = 0
@@ -189,15 +189,13 @@ class Ordenes:
 
 # inicio de programa
 if __name__ == "__main__":
-    #orders = Ordenes('BNBUSDTPERP')
-
-    #from waitress import serve
+    from waitress import serve
     cliente = Cliente('BNBUSDT')
     list_balance = cliente.client.futures_account_balance()
     balance = float([x['balance']
                     for x in list_balance if x['asset'] == 'USDT'][0])
     print('Inicio', str(balance))
-    # orders.create_order_exe(38544919467,'stop')
+
     app = Flask(__name__)
 
     @app.route('/')
@@ -218,8 +216,8 @@ if __name__ == "__main__":
                 orders.create_order('SELL')
                 mensaje = 'Se realizo una orden en short'
             return mensaje
-    app.run(host='127.0.0.1', port=80)
-    #serve(app, host='0.0.0.0', port=80)
+    #app.run(host='127.0.0.1', port=80)
+    serve(app, host='0.0.0.0', port=80)
 # ----------json recepción
 '''
 Envio del dato desde el cliente, de esta manera
