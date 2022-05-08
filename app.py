@@ -19,7 +19,7 @@ with open('datos.json') as json_file:
 class Cliente:
     def __init__(self, symbol: str) -> None:
         self.symbol = symbol
-        with open('data.json') as json_file:
+        with open('datos.json') as json_file:
             claves = load(json_file)
         self.client = Client(claves['shercan']['key'],
                              claves['shercan']['secret'])
@@ -42,7 +42,7 @@ class Ordenes:
         self.cliente = Cliente(symbol.replace('PERP', ''))
         self.message = Mensaje()
 
-    def create_order(self, position: str):
+    def create_order(self, position: str,close:str):
         quan_before=0
         if symbols[self.cliente.symbol]['quantity'] != 0:
             quan_before = float(symbols[self.cliente.symbol]['quantity'])
@@ -51,7 +51,7 @@ class Ordenes:
             self.cliente.client.futures_cancel_all_open_orders(symbol=symbols[self.cliente.symbol]['symbol'])
         except:
             pass
-        quantity_n = str(((balance/6)*symbols[self.cliente.symbol]['leverage'])/float(self.cliente.client.futures_symbol_ticker(symbol=symbols[self.cliente.symbol]['symbol'])['price']))[0:symbols[self.cliente.symbol]["accuracy"]]
+        quantity_n = str(((balance/6)*symbols[self.cliente.symbol]['leverage'])/float(close))[0:symbols[self.cliente.symbol]["accuracy"]]
 
         if symbols[self.cliente.symbol]['id'] != 0:
             quantity_n= str(float(quantity_n)+quan_before)
@@ -65,7 +65,7 @@ class Ordenes:
         symbols[self.cliente.symbol]['side'] = position
         symbols[self.cliente.symbol]['quantity'] = float(order['origQty'])-quan_before
         symbols[self.cliente.symbol]['id'] = order['orderId']
-        print(symbols[self.cliente.symbol],'Quan',quan_before)
+        #print(symbols[self.cliente.symbol],'Quan',quan_before)
 
         order_exe = Thread(target=self.create_order_exe,args=(symbols[self.cliente.symbol]['id'], 'create',))
         order_exe.start()
@@ -86,7 +86,7 @@ class Ordenes:
                 symbols[self.cliente.symbol]['price']*(0.998+symbols[self.cliente.symbol]['stop']), symbols[self.cliente.symbol]["round"])
             price = round(
                 symbols[self.cliente.symbol]['price']*(1+symbols[self.cliente.symbol]['stop']), symbols[self.cliente.symbol]["round"])
-        print('stop',stop,'price',price)
+        #print('stop',stop,'price',price)
         stop = self.cliente.client.futures_create_order(
             symbol=symbols[self.cliente.symbol]['symbol'],
             side=pos,
@@ -222,7 +222,7 @@ if __name__ == "__main__":
 
             if recive['position'] == '1' and recive['order'] == 'buy' and recive['ticker'] == 'BTCUSDTPERP':
                 orders_buy_btc = Ordenes(recive['ticker'])
-                orders_buy_btc.create_order('BUY')
+                orders_buy_btc.create_order('BUY',recive['price'])
                 mensaje = 'Se realizo una orden en long BTC'
                 try:
                     del orders_sell_btc
@@ -230,7 +230,7 @@ if __name__ == "__main__":
                     pass
             elif recive['position'] == '1' and recive['order'] == 'buy' and recive['ticker'] == 'XRPUSDTPERP':
                 orders_buy_xrp = Ordenes(recive['ticker'])
-                orders_buy_xrp.create_order('BUY')
+                orders_buy_xrp.create_order('BUY',recive['price'])
                 mensaje = 'Se realizo una orden en long XRP'
                 try:
                     del orders_sell_xrp
@@ -238,7 +238,7 @@ if __name__ == "__main__":
                     pass
             elif recive['position'] == '1' and recive['order'] == 'buy' and recive['ticker'] == 'ETHUSDTPERP':
                 orders_buy_eth = Ordenes(recive['ticker'])
-                orders_buy_eth.create_order('BUY')
+                orders_buy_eth.create_order('BUY',recive['price'])
                 mensaje = 'Se realizo una orden en long ETH'
                 try:
                     del orders_sell_eth
@@ -246,7 +246,7 @@ if __name__ == "__main__":
                     pass
             elif recive['position'] == '-1' and recive['order'] == 'sell' and recive['ticker'] == 'BTCUSDTPERP':
                 orders_sell_btc = Ordenes(recive['ticker'])
-                orders_sell_btc.create_order('SELL')
+                orders_sell_btc.create_order('SELL',recive['price'])
                 mensaje = 'Se realizo una orden en short BTC'
                 try:
                     del orders_buy_btc
@@ -254,7 +254,7 @@ if __name__ == "__main__":
                     pass
             elif recive['position'] == '-1' and recive['order'] == 'sell' and recive['ticker'] == 'XRPUSDTPERP':
                 orders_sell_xrp = Ordenes(recive['ticker'])
-                orders_sell_xrp.create_order('SELL')
+                orders_sell_xrp.create_order('SELL',recive['price'])
                 mensaje = 'Se realizo una orden en short XRP'
                 try:
                     del orders_buy_xrp
@@ -262,7 +262,7 @@ if __name__ == "__main__":
                     pass
             elif recive['position'] == '-1' and recive['order'] == 'sell' and recive['ticker'] == 'ETHUSDTPERP':
                 orders_sell_eth = Ordenes(recive['ticker'])
-                orders_sell_eth.create_order('SELL')
+                orders_sell_eth.create_order('SELL',recive['price'])
                 mensaje = 'Se realizo una orden en short ETH'
                 try:
                     del orders_buy_eth
