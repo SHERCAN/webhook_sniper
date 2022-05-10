@@ -5,12 +5,12 @@ from json import load
 from time import sleep
 from requests import post
 from binance.client import Client
-from datetime import datetime as dt
+import datetime as dt
 from flask import Flask, request, render_template
 # --------------------
 # clases-----------------------
 balance = 0.0
-list_symbols = ['BTCUSDT', 'ETHUSDT', 'XRPUSDT', 'SOLUSDT', 'BNBUSDT']
+list_symbols = ['BTCUSDT', 'ETHUSDT', 'XRPUSDT']
 with open('datos.json') as json_file:
     symbols = load(json_file)
 # clase cliente
@@ -33,8 +33,7 @@ class Mensaje:
         pass
 
     def send(self, data: str):
-        post('https://api.telegram.org/bot5243749301:AAHIDCwt13NLYpmJ7WVaJLs57G0Z_IyFTLE/sendMessage',
-             data={'chat_id': '-548326689', 'text': data})
+        post('https://api.telegram.org/bot5243749301:AAHIDCwt13NLYpmJ7WVaJLs57G0Z_IyFTLE/sendMessage',data={'chat_id': '-548326689', 'text': data})
 
 
 class Ordenes:
@@ -61,9 +60,9 @@ class Ordenes:
             side=position,
             type='MARKET',
             quantity=quantity_n)
-
+        sleep(0.2)
         symbols[self.cliente.symbol]['side'] = position
-        symbols[self.cliente.symbol]['quantity'] = float(order['origQty'])-quan_before
+        symbols[self.cliente.symbol]['quantity'] = abs(self.cliente.client.futures_position_information(symbol=symbols[self.cliente.symbol]['symbol'])[0]['positionAmt'])
         symbols[self.cliente.symbol]['id'] = order['orderId']
         #print(symbols[self.cliente.symbol],'Quan',quan_before)
 
@@ -87,18 +86,19 @@ class Ordenes:
             price = round(
                 symbols[self.cliente.symbol]['price']*(1+symbols[self.cliente.symbol]['stop']), symbols[self.cliente.symbol]["round"])
         #print('stop',stop,'price',price)
-        stop = self.cliente.client.futures_create_order(
-            symbol=symbols[self.cliente.symbol]['symbol'],
-            side=pos,
-            type='STOP',
-            quantity=symbols[self.cliente.symbol]['quantity'],
-            price=price,
-            stopPrice=stop,
-            reduceOnly=True
-        )
-        
-        order_exe = Thread(target=self.create_order_exe,
-                           args=(stop['orderId'], 'stop',))
+        try:
+            stop = self.cliente.client.futures_create_order(
+                symbol=symbols[self.cliente.symbol]['symbol'],
+                side=pos,
+                type='STOP',
+                quantity=symbols[self.cliente.symbol]['quantity'],
+                price=price,
+                stopPrice=stop,
+                reduceOnly=True
+            )
+        except Exception as e:
+            print('Compra realizada por fuera ')        
+        order_exe = Thread(target=self.create_order_exe,args=(stop['orderId'], 'stop',))
         order_exe.start()
         return price
 
@@ -129,8 +129,7 @@ class Ordenes:
             reduceOnly=True
         )
         
-        order_exe = Thread(target=self.create_order_exe,
-                           args=(take['orderId'], 'take',))
+        order_exe = Thread(target=self.create_order_exe,args=(take['orderId'], 'take',))
         order_exe.start()
         return price
 
@@ -140,13 +139,15 @@ class Ordenes:
         global balance
         
         while True:
+            sleep(0.5)
             while True:
                 try:
                     order = self.cliente.client.futures_get_order(orderId=order_id, symbol=symbols[self.cliente.symbol]['symbol'])
                     break
                 except Exception as e:
-                    print(str(dt.now()), 'Error '+str(e)+' con '+intro+' y '+symbols[self.cliente.symbol]['symbol'], order_id)
-                    self.message.send('Error '+str(e)+' con '+intro+' y '+symbols[self.cliente.symbol]['symbol'], order_id)
+                    now=dt.datetime.now(tz = dt.timezone(offset = dt.timedelta(hours = -5))).replace(microsecond = 0).isoformat()
+                    print(str(now), 'Error '+str(e)+' con '+intro+' y '+symbols[self.cliente.symbol]['symbol'], order_id)
+                    self.message.send('Error '+str(e)+' con '+intro+' y '+symbols[self.cliente.symbol]['symbol']+' '+str(order_id))
                 sleep(5)
             
             if (order['status'] == 'FILLED' and intro == 'create'):
@@ -155,7 +156,8 @@ class Ordenes:
                 price_stop = self.stop_loss(symbols[self.cliente.symbol]['side'])
                 price_take = self.take_profit(symbols[self.cliente.symbol]['side'])
                 self.message.send('Se compro '+symbols[self.cliente.symbol]['symbol']+' el precio de compra fue ' +str(symbols[self.cliente.symbol]["price"])+' el precio del stop es '+str(price_stop)+' y el precio del take es de '+str(price_take))
-                print(str(dt.now()), 'Se compro '+symbols[self.cliente.symbol]['symbol']+' el precio de compra fue ' +str(symbols[self.cliente.symbol]["price"])+' el precio del stop es '+str(price_stop)+' y el precio del take es de '+str(price_take))
+                now=dt.datetime.now(tz = dt.timezone(offset = dt.timedelta(hours = -5))).replace(microsecond = 0).isoformat()
+                print(str(now), 'Se compro '+symbols[self.cliente.symbol]['symbol']+' el precio de compra fue ' +str(symbols[self.cliente.symbol]["price"])+' el precio del stop es '+str(price_stop)+' y el precio del take es de '+str(price_take))
                 break
             
             if (order['status'] == 'FILLED' and intro == 'stop'):
@@ -168,10 +170,10 @@ class Ordenes:
                 self.cliente.client.futures_cancel_all_open_orders(
                     symbol=symbols[self.cliente.symbol]['symbol'])
                 symbols[self.cliente.symbol]['id'] = 0
-                symbols[self.cliente.symbol]['quantity'] = 0
-                self.message.send('Se tomo el stop loss de ' +
-                                  symbols[self.cliente.symbol]['symbol']+' y el balance es de '+str(round(balance, 2)))
-                print(str(dt.now()), 'Se tomo el stop loss de ' +
+                symbols[self.cliente.symbol]['quantity'] = 0.0
+                self.message.send('Se tomo el stop loss de '+symbols[self.cliente.symbol]['symbol']+' y el balance es de '+str(round(balance, 2)))
+                now=dt.datetime.now(tz = dt.timezone(offset = dt.timedelta(hours = -5))).replace(microsecond = 0).isoformat()
+                print(str(now), 'Se tomo el stop loss de ' +
                       symbols[self.cliente.symbol]['symbol']+' y el balance es de '+str(round(balance, 2)))
                 break
             
@@ -185,14 +187,18 @@ class Ordenes:
                 self.cliente.client.futures_cancel_all_open_orders(
                     symbol=symbols[self.cliente.symbol]['symbol'])
                 symbols[self.cliente.symbol]['id'] = 0
-                symbols[self.cliente.symbol]['quantity'] = 0
+                symbols[self.cliente.symbol]['quantity'] = 0.0
                 self.message.send('Se tomo el take profit de ' +
                                   symbols[self.cliente.symbol]['symbol']+' y el balance es de '+str(round(balance, 2)))
-                print(str(dt.now()), 'Se tomo el take profit de ' +
+                now=dt.datetime.now(tz = dt.timezone(offset = dt.timedelta(hours = -5))).replace(microsecond = 0).isoformat()
+                print(str(now), 'Se tomo el take profit de ' +
                       symbols[self.cliente.symbol]['symbol']+' y el balance es de '+str(round(balance, 2)))
                 break
+            if order['status'] == 'CANCELED':
+                self.cliente.client.futures_cancel_all_open_orders(symbol=symbols[self.cliente.symbol]['symbol'])
+                break
             
-            sleep(1)
+            sleep(0.5)
         sys.exit()
 
 # inicio de programa
@@ -203,10 +209,29 @@ if __name__ == "__main__":
     balance = float([x['balance']
                     for x in list_balance if x['asset'] == 'USDT'][0])
     for i in list_symbols:
-        cliente.client.futures_change_leverage(
-            symbol=i, leverage=symbols[i]['leverage'])
-    print('Inicio', str(balance), str(dt.now()))
-
+        cliente.client.futures_change_leverage(symbol=i, leverage=symbols[i]['leverage'])
+        info_coin=cliente.client.futures_position_information(symbol=i)
+        cant_pos=float(info_coin[0]['positionAmt'])
+        if cant_pos!=0:
+            cliente.client.futures_cancel_all_open_orders(symbol=i)
+            if cant_pos>0:
+                symbols[i]['price']=float(info_coin[0]['entryPrice'])
+                symbols[i]['quantity']=abs(cant_pos)
+                symbols[i]['id'] = 100
+                orders_before = Ordenes(i)
+                orders_before.stop_loss('BUY')
+                orders_before.take_profit('BUY')
+            else:
+                symbols[i]['price']=float(info_coin[0]['entryPrice'])
+                symbols[i]['quantity']=abs(cant_pos)
+                symbols[i]['id'] = 100
+                orders_before = Ordenes(i)
+                orders_before.stop_loss('SELL')
+                orders_before.take_profit('SELL')
+    now=dt.datetime.now(tz = dt.timezone(offset = dt.timedelta(hours = -5))).replace(microsecond = 0).isoformat()
+    print('Inicio', str(balance), str(now))
+    print(symbols)
+    del cliente
     app = Flask(__name__)
 
     @app.route('/')
@@ -270,9 +295,9 @@ if __name__ == "__main__":
                     pass
             return mensaje
     #app.run(host='127.0.0.1', port=80)
-    serve(app, host='0.0.0.0', port=80)
+    serve(app, host='0.0.0.0', port=80, url_scheme='https')
 # ----------json recepción
 '''
 Envio del dato desde el cliente, de esta manera
-{"order":"{{strategy.order.action}}","position":"{{plot_15}}","ticker":"{{ticker}}"}
+{"order":"{{strategy.order.action}}","position":"{{plot_15}}","ticker":"{{ticker}}","price":"{{close}}"}
 '''
