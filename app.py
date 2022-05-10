@@ -61,8 +61,9 @@ class Ordenes:
             type='MARKET',
             quantity=quantity_n)
         sleep(0.2)
+        position=self.cliente.client.futures_position_information(symbol=symbols[self.cliente.symbol]['symbol'])
         symbols[self.cliente.symbol]['side'] = position
-        symbols[self.cliente.symbol]['quantity'] = abs(self.cliente.client.futures_position_information(symbol=symbols[self.cliente.symbol]['symbol'])[0]['positionAmt'])
+        symbols[self.cliente.symbol]['quantity'] = abs(float(position[0]['positionAmt']))
         symbols[self.cliente.symbol]['id'] = order['orderId']
         #print(symbols[self.cliente.symbol],'Quan',quan_before)
 
@@ -162,11 +163,9 @@ class Ordenes:
             
             if (order['status'] == 'FILLED' and intro == 'stop'):
                 if order['side'] == 'SELL':
-                    balance += float(order['cumQuote']) - \
-                        symbols[self.cliente.symbol]['quote']
+                    balance += float(order['cumQuote'])-symbols[self.cliente.symbol]['quote']
                 else:
-                    balance += symbols[self.cliente.symbol]['quote'] - \
-                        float(order['cumQuote'])*0.9998
+                    balance += symbols[self.cliente.symbol]['quote']-float(order['cumQuote'])*0.9998
                 self.cliente.client.futures_cancel_all_open_orders(
                     symbol=symbols[self.cliente.symbol]['symbol'])
                 symbols[self.cliente.symbol]['id'] = 0
@@ -179,11 +178,9 @@ class Ordenes:
             
             if (order['status'] == 'FILLED' and intro == 'take'):
                 if order['side'] == 'SELL':
-                    balance += float(order['cumQuote']) - \
-                        symbols[self.cliente.symbol]['quote']
+                    balance += float(order['cumQuote']) -symbols[self.cliente.symbol]['quote']
                 else:
-                    balance += symbols[self.cliente.symbol]['quote'] - \
-                        float(order['cumQuote'])*0.9998
+                    balance += symbols[self.cliente.symbol]['quote'] -float(order['cumQuote'])*0.9998
                 self.cliente.client.futures_cancel_all_open_orders(
                     symbol=symbols[self.cliente.symbol]['symbol'])
                 symbols[self.cliente.symbol]['id'] = 0
@@ -216,6 +213,7 @@ if __name__ == "__main__":
             cliente.client.futures_cancel_all_open_orders(symbol=i)
             if cant_pos>0:
                 symbols[i]['price']=float(info_coin[0]['entryPrice'])
+                symbols[i]['quote'] = float(info_coin['isolatedWallet'])*0.9996
                 symbols[i]['quantity']=abs(cant_pos)
                 symbols[i]['id'] = 100
                 orders_before = Ordenes(i)
