@@ -209,7 +209,8 @@ if __name__ == "__main__":
     list_balance = cliente.client.futures_account_balance()
     balance = float([x['balance']for x in list_balance if x['asset'] == 'USDT'][0])
     mensaje=Mensaje()
-    mensaje.send(f'Tu balance es de {balance} USDT')
+    mensaje.send(f'Tu balance es de {round(balance,2)} USDT')
+    del mensaje
     for i in list_symbols:
         cliente.client.futures_change_leverage(symbol=i, leverage=symbols[i]['leverage'])
         info_coin=cliente.client.futures_position_information(symbol=i)
