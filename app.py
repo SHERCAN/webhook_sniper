@@ -10,11 +10,11 @@ from flask import Flask, request, render_template
 # --------------------
 # clases-----------------------
 balance = 0.0
+day_before= dt.datetime.now().day
 list_symbols = ['BTCUSDT', 'ETHUSDT', 'XRPUSDT']
 with open('datos.json') as json_file:
     symbols = load(json_file)
 # clase cliente
-
 
 class Cliente:
     def __init__(self, symbol: str) -> None:
@@ -26,7 +26,6 @@ class Cliente:
 
 # ordenes de compra y venta
 
-
 class Mensaje:
 
     def __init__(self):
@@ -34,7 +33,6 @@ class Mensaje:
 
     def send(self, data: str):
         post('https://api.telegram.org/bot5243749301:AAHIDCwt13NLYpmJ7WVaJLs57G0Z_IyFTLE/sendMessage',data={'chat_id': '-548326689', 'text': data})
-
 
 class Ordenes:
     def __init__(self, symbol: str) -> None:
@@ -50,20 +48,37 @@ class Ordenes:
             self.cliente.client.futures_cancel_all_open_orders(symbol=symbols[self.cliente.symbol]['symbol'])
         except:
             pass
-        quantity_n = str(((balance/6)*symbols[self.cliente.symbol]['leverage'])/float(close))[0:symbols[self.cliente.symbol]["accuracy"]]
+        list_balance = self.cliente.client.futures_account_balance()
+        balance = float([x['balance']for x in list_balance if x['asset'] == 'USDT'][0])
+        day_now = dt.datetime.now().day
+        if day_before!=day_now:
+            self.message.send(f'Tu balance es de {balance} USDT')
+        quantity_n = str(((balance/5)*symbols[self.cliente.symbol]['leverage'])/float(close))[0:symbols[self.cliente.symbol]["accuracy"]]
 
         if symbols[self.cliente.symbol]['id'] != 0:
             quantity_n= str(float(quantity_n)+quan_before)
-
-        order = self.cliente.client.futures_create_order(
-            symbol=symbols[self.cliente.symbol]['symbol'],
-            side=position,
-            type='MARKET',
-            quantity=quantity_n)
+        try:
+            order = self.cliente.client.futures_create_order(
+                symbol=symbols[self.cliente.symbol]['symbol'],
+                side=position,
+                type='MARKET',
+                quantity=quantity_n)
+        except Exception as e:
+            self.message.send('El error en compra fue ',str(e))
+            
         sleep(0.2)
-        position=self.cliente.client.futures_position_information(symbol=symbols[self.cliente.symbol]['symbol'])
-        symbols[self.cliente.symbol]['side'] = position
-        symbols[self.cliente.symbol]['quantity'] = abs(float(position[0]['positionAmt']))
+        while True:
+            posicion=self.cliente.client.futures_position_information(symbol=symbols[self.cliente.symbol]['symbol'])[0]['positionAmt']
+            if float(posicion) > 0:
+                side='BUY'
+                break
+            elif float(posicion) < 0:
+                side = 'SELL'
+                break
+            sleep(2)
+            print('Posicion no ha entrado',posicion)
+        symbols[self.cliente.symbol]['side'] = side
+        symbols[self.cliente.symbol]['quantity'] = abs(float(posicion))
         symbols[self.cliente.symbol]['id'] = order['orderId']
         #print(symbols[self.cliente.symbol],'Quan',quan_before)
 
@@ -98,7 +113,7 @@ class Ordenes:
                 reduceOnly=True
             )
         except Exception as e:
-            print('Compra realizada por fuera ')        
+            print('Compra realizada por fuera '+ str(e))
         order_exe = Thread(target=self.create_order_exe,args=(stop['orderId'], 'stop',))
         order_exe.start()
         return price
@@ -162,34 +177,23 @@ class Ordenes:
                 break
             
             if (order['status'] == 'FILLED' and intro == 'stop'):
-                if order['side'] == 'SELL':
-                    balance += float(order['cumQuote'])-symbols[self.cliente.symbol]['quote']
-                else:
-                    balance += symbols[self.cliente.symbol]['quote']-float(order['cumQuote'])*0.9998
                 self.cliente.client.futures_cancel_all_open_orders(
                     symbol=symbols[self.cliente.symbol]['symbol'])
                 symbols[self.cliente.symbol]['id'] = 0
                 symbols[self.cliente.symbol]['quantity'] = 0.0
-                self.message.send('Se tomo el stop loss de '+symbols[self.cliente.symbol]['symbol']+' y el balance es de '+str(round(balance, 2)))
+                self.message.send('Se tomo el stop loss de '+symbols[self.cliente.symbol]['symbol'])
                 now=dt.datetime.now(tz = dt.timezone(offset = dt.timedelta(hours = -5))).replace(microsecond = 0).isoformat()
-                print(str(now), 'Se tomo el stop loss de ' +
-                      symbols[self.cliente.symbol]['symbol']+' y el balance es de '+str(round(balance, 2)))
+                print(str(now), 'Se tomo el stop loss de '+symbols[self.cliente.symbol]['symbol'])
                 break
             
             if (order['status'] == 'FILLED' and intro == 'take'):
-                if order['side'] == 'SELL':
-                    balance += float(order['cumQuote']) -symbols[self.cliente.symbol]['quote']
-                else:
-                    balance += symbols[self.cliente.symbol]['quote'] -float(order['cumQuote'])*0.9998
                 self.cliente.client.futures_cancel_all_open_orders(
                     symbol=symbols[self.cliente.symbol]['symbol'])
                 symbols[self.cliente.symbol]['id'] = 0
                 symbols[self.cliente.symbol]['quantity'] = 0.0
-                self.message.send('Se tomo el take profit de ' +
-                                  symbols[self.cliente.symbol]['symbol']+' y el balance es de '+str(round(balance, 2)))
+                self.message.send('Se tomo el take profit de '+symbols[self.cliente.symbol]['symbol'])
                 now=dt.datetime.now(tz = dt.timezone(offset = dt.timedelta(hours = -5))).replace(microsecond = 0).isoformat()
-                print(str(now), 'Se tomo el take profit de ' +
-                      symbols[self.cliente.symbol]['symbol']+' y el balance es de '+str(round(balance, 2)))
+                print(str(now), 'Se tomo el take profit de '+symbols[self.cliente.symbol]['symbol'])
                 break
             if order['status'] == 'CANCELED':
                 self.cliente.client.futures_cancel_all_open_orders(symbol=symbols[self.cliente.symbol]['symbol'])
@@ -203,8 +207,9 @@ if __name__ == "__main__":
     from waitress import serve
     cliente = Cliente('BNBUSDT')
     list_balance = cliente.client.futures_account_balance()
-    balance = float([x['balance']
-                    for x in list_balance if x['asset'] == 'USDT'][0])
+    balance = float([x['balance']for x in list_balance if x['asset'] == 'USDT'][0])
+    mensaje=Mensaje()
+    mensaje.send(f'Tu balance es de {balance} USDT')
     for i in list_symbols:
         cliente.client.futures_change_leverage(symbol=i, leverage=symbols[i]['leverage'])
         info_coin=cliente.client.futures_position_information(symbol=i)
@@ -213,7 +218,7 @@ if __name__ == "__main__":
             cliente.client.futures_cancel_all_open_orders(symbol=i)
             if cant_pos>0:
                 symbols[i]['price']=float(info_coin[0]['entryPrice'])
-                symbols[i]['quote'] = float(info_coin['isolatedWallet'])*0.9996
+                symbols[i]['quote'] = float(info_coin[0]['isolatedWallet'])*0.9996
                 symbols[i]['quantity']=abs(cant_pos)
                 symbols[i]['id'] = 100
                 orders_before = Ordenes(i)
