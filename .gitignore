@@ -1,3 +1,5 @@
 *.json
 pruebas.py
 webapp
+*.csv
+*.xlsx
