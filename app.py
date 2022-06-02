@@ -10,6 +10,7 @@ from flask import Flask, request, render_template
 # --------------------
 # clases-----------------------
 balance = 0.0
+hour_before = dt.datetime.now().hour
 list_symbols = ['BTCUSDT', 'ETHUSDT', 'XRPUSDT']
 with open('datos.json') as json_file:
     symbols = load(json_file)
@@ -229,26 +230,20 @@ class Ordenes:
 
 
 class All_time:
-    
+    global hour_before
 
     def __init__(self) -> None:
-        self.hour_before=dt.datetime.now().hour
         self.message = Mensaje()
-        self.thread = Thread(target=self.hora)
-        self.thread.start()
-
+        secundarios = Thread(target=self.hora)
+        secundarios.start()
+        
     def hora(self):
         while True:
-            hour_now = dt.datetime.now().hour
-            if self.hour_before != hour_now and hour_now%6==0:
-                cliente = Cliente('BNBUSDT')
-                list_balance = cliente.client.futures_account_balance()
-                balance = float([x['balance']
-                    for x in list_balance if x['asset'] == 'USDT'][0])
-                self.message.send(f'Tu balance es de {round(balance,2)} USDT')
-                self.hour_before = hour_now
             sleep(10)
-
+            hour_now = dt.datetime.now().hour
+            if hour_now%6==0 and hour_before!=hour_now:
+                self.message.send(f'Tu balance es de {round(balance,2)} USDT')
+                hour_before = hour_now
 
 # inicio de programa
 if __name__ == "__main__":
@@ -288,12 +283,13 @@ if __name__ == "__main__":
     print('Inicio', str(balance), str(now))
     print(symbols)
     del cliente
-    repeat=All_time()
+    update=All_time()
+#-----INICIO DEL BACKEND------    
     app = Flask(__name__)
 
     @app.route('/')
     def main():
-        return render_template('main.html')
+        return render_template('index.html')
 
     @app.route('/webhook', methods=['POST'])
     def webhook():
