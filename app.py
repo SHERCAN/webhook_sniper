@@ -7,17 +7,20 @@ from requests import post
 from binance.client import Client
 import datetime as dt
 from flask import Flask, request, render_template
-# --------------------
-# clases-----------------------
+
+#-----------------Variables globales-----------------------
+
 balance = 0.0
-hour_before = dt.datetime.now().hour
 list_symbols = ['BTCUSDT', 'ETHUSDT', 'XRPUSDT']
 with open('datos.json') as json_file:
     symbols = load(json_file)
-# clase cliente
 
+#------------------clase cliente--------------------
 
 class Cliente:
+    """
+    Esta clase genera el cliente con conexión a Binance
+    """
     def __init__(self, symbol: str) -> None:
         self.symbol = symbol
         with open('datos.json') as json_file:
@@ -25,11 +28,12 @@ class Cliente:
         self.client = Client(claves['shercan']['key'],
                              claves['shercan']['secret'])
 
-# ordenes de compra y venta
-
+#-------------------Clase mensaje
 
 class Mensaje:
-
+    '''
+    Esta clase envía los mensajes a Telegram
+    '''
     def __init__(self):
         pass
 
@@ -37,16 +41,38 @@ class Mensaje:
         post('https://api.telegram.org/bot5243749301:AAHIDCwt13NLYpmJ7WVaJLs57G0Z_IyFTLE/sendMessage',
              data={'chat_id': '-548326689', 'text': data})
 
-
+#--------------------Clase ordenes---------
 class Ordenes:
+    '''Esta clase es la que recibe todo y envía ordenes cacelaciones, etc.
+    '''
     def __init__(self, symbol: str) -> None:
         self.cliente = Cliente(symbol.replace('PERP', ''))
         self.message = Mensaje()
 
-    def create_order(self, position: str, close: str):
-        quan_before = 0
+    def create_order(self, position: str, close: str, leverage: int):
+        '''Creación de la orden que llega desde el webhook'''
         if symbols[self.cliente.symbol]['quantity'] != 0:
             quan_before = float(symbols[self.cliente.symbol]['quantity'])
+
+        if symbols[self.cliente.symbol]['leverage'] != leverage:
+            symbols[self.cliente.symbol]['leverage'] = leverage
+
+            if quan_before != 0:
+                try:
+                    order = self.cliente.client.futures_create_order(
+                        symbol=symbols[self.cliente.symbol]['symbol'],
+                        side=position,
+                        type='MARKET',
+                        quantity=str(quan_before)[0:symbols[self.cliente.symbol]["accuracy"]])
+                    sleep(0.1)
+                except Exception as e:
+                    print(symbols[self.cliente.symbol]['symbol'], position, 'MARKET', str(
+                        quantity_n)[0:symbols[self.cliente.symbol]["accuracy"]])
+                    self.message.send('El error en compra fue '+str(e))
+                self.cliente.client.futures_change_leverage(
+                    symbol=symbols[self.cliente.symbol]['symbol'],
+                    leverage=leverage)
+
         list_balance = self.cliente.client.futures_account_balance()
         balance = float([x['balance']
                         for x in list_balance if x['asset'] == 'USDT'][0])
@@ -78,16 +104,12 @@ class Ordenes:
 
         symbols[self.cliente.symbol]['quantity'] = abs(float(posicion))
         symbols[self.cliente.symbol]['id'] = order['orderId']
-        # print(symbols[self.cliente.symbol],'Quan',quan_before)
-
         order_exe = Thread(target=self.create_order_exe, args=(
             symbols[self.cliente.symbol]['id'], 'create',))
         order_exe.start()
 
-# creación del stop loss
-
     def stop_loss(self, position: str):
-
+        '''Calculo de los stop loss de todas las ordenes'''
         if position == 'BUY':
             pos = 'SELL'
             stop = round(
@@ -100,7 +122,7 @@ class Ordenes:
                 symbols[self.cliente.symbol]['price']*(0.998+symbols[self.cliente.symbol]['stop']), symbols[self.cliente.symbol]["round"])
             price = round(
                 symbols[self.cliente.symbol]['price']*(1+symbols[self.cliente.symbol]['stop']), symbols[self.cliente.symbol]["round"])
-        # print('stop',stop,'price',price)
+
         try:
             stop = self.cliente.client.futures_create_order(
                 symbol=symbols[self.cliente.symbol]['symbol'],
@@ -120,10 +142,8 @@ class Ordenes:
         order_exe.start()
         return price
 
-# creación del take profit
-
     def take_profit(self, position: str):
-
+        '''Calculo del take profit de todas las ordenes'''
         if position == 'BUY':
             pos = 'SELL'
             stop = round(
@@ -155,11 +175,8 @@ class Ordenes:
         order_exe.start()
         return price
 
-# seguimiento de las ordenes
-
     def create_order_exe(self, order_id, intro: str):
-        global balance
-
+        '''Seguimiento de todas las ordenes'''        
         while True:
             sleep(0.5)
             while True:
@@ -187,11 +204,11 @@ class Ordenes:
                     symbols[self.cliente.symbol]['side'])
                 price_take = self.take_profit(
                     symbols[self.cliente.symbol]['side'])
-                self.message.send('Se compro '+symbols[self.cliente.symbol]['symbol']+' el precio de compra fue ' + str(
+                self.message.send(order['positionSide']+' en '+symbols[self.cliente.symbol]['symbol']+' el precio de compra fue ' + str(
                     symbols[self.cliente.symbol]["price"])+' el precio del stop es '+str(price_stop)+' y el precio del take es de '+str(price_take))
                 now = dt.datetime.now(tz=dt.timezone(offset=dt.timedelta(
                     hours=-5))).replace(microsecond=0).isoformat()
-                print(str(now), 'Se compro '+symbols[self.cliente.symbol]['symbol']+' el precio de compra fue ' + str(
+                print(str(now), order['positionSide']+' en '+symbols[self.cliente.symbol]['symbol']+' el precio de compra fue ' + str(
                     symbols[self.cliente.symbol]["price"])+' el precio del stop es '+str(price_stop)+' y el precio del take es de '+str(price_take))
                 break
 
@@ -228,24 +245,31 @@ class Ordenes:
             sleep(0.5)
         sys.exit()
 
+#-----------------------Evenetos que tienen que estar repitiendose por un largo tiempo.------------
 
 class All_time:
-    global hour_before
-
+   
     def __init__(self) -> None:
+        self.hour_before=dt.datetime.now().hour
         self.message = Mensaje()
-        secundarios = Thread(target=self.hora)
-        secundarios.start()
-        
-    def hora(self):
-        while True:
-            sleep(10)
-            hour_now = dt.datetime.now().hour
-            if hour_now%6==0 and hour_before!=hour_now:
-                self.message.send(f'Tu balance es de {round(balance,2)} USDT')
-                hour_before = hour_now
+        self.thread = Thread(target=self.hora)
+        self.thread.start()
 
-# inicio de programa
+    def hora(self):
+        '''Envío de mensaje al grupo de Telegram del saldo'''
+        while True:
+            hour_now = dt.datetime.now().hour
+            if self.hour_before != hour_now and hour_now%6==0:
+                sleep(20)
+                cliente = Cliente('BNBUSDT')
+                list_balance = cliente.client.futures_account_balance()
+                balance = float([x['balance']
+                    for x in list_balance if x['asset'] == 'USDT'][0])
+                self.message.send(f'Tu balance es de {round(balance,2)} USDT')
+                self.hour_before = hour_now
+                del cliente
+            
+#-----------------------------------inicio de programa
 if __name__ == "__main__":
     from waitress import serve
     cliente = Cliente('BNBUSDT')
@@ -281,10 +305,9 @@ if __name__ == "__main__":
     now = dt.datetime.now(tz=dt.timezone(offset=dt.timedelta(
         hours=-5))).replace(microsecond=0).isoformat()
     print('Inicio', str(balance), str(now))
-    print(symbols)
     del cliente
-    update=All_time()
-#-----INICIO DEL BACKEND------    
+    update = All_time()
+# -----INICIO DEL BACKEND------
     app = Flask(__name__)
 
     @app.route('/')
@@ -300,7 +323,13 @@ if __name__ == "__main__":
 
             if recive['position'] == '1' and recive['order'] == 'buy' and recive['ticker'] == 'BTCUSDTPERP':
                 orders_buy_btc = Ordenes(recive['ticker'])
-                orders_buy_btc.create_order('BUY', recive['price'])
+                try:
+                    leverage = recive["leverage"]
+                except:
+                    leverage = symbols[recive['ticker'].replace(
+                        'PERP', '')]['leverage']
+                orders_buy_btc.create_order(
+                    'BUY', recive['price'], int(leverage))
                 mensaje = 'Se realizo una orden en long BTC'
                 try:
                     del orders_sell_btc
@@ -308,7 +337,13 @@ if __name__ == "__main__":
                     pass
             elif recive['position'] == '1' and recive['order'] == 'buy' and recive['ticker'] == 'XRPUSDTPERP':
                 orders_buy_xrp = Ordenes(recive['ticker'])
-                orders_buy_xrp.create_order('BUY', recive['price'])
+                try:
+                    leverage = recive["leverage"]
+                except:
+                    leverage = symbols[recive['ticker'].replace(
+                        'PERP', '')]['leverage']
+                orders_buy_xrp.create_order(
+                    'BUY', recive['price'], int(leverage))
                 mensaje = 'Se realizo una orden en long XRP'
                 try:
                     del orders_sell_xrp
@@ -316,7 +351,13 @@ if __name__ == "__main__":
                     pass
             elif recive['position'] == '1' and recive['order'] == 'buy' and recive['ticker'] == 'ETHUSDTPERP':
                 orders_buy_eth = Ordenes(recive['ticker'])
-                orders_buy_eth.create_order('BUY', recive['price'])
+                try:
+                    leverage = recive["leverage"]
+                except:
+                    leverage = symbols[recive['ticker'].replace(
+                        'PERP', '')]['leverage']
+                orders_buy_eth.create_order(
+                    'BUY', recive['price'], int(leverage))
                 mensaje = 'Se realizo una orden en long ETH'
                 try:
                     del orders_sell_eth
@@ -324,7 +365,13 @@ if __name__ == "__main__":
                     pass
             elif recive['position'] == '-1' and recive['order'] == 'sell' and recive['ticker'] == 'BTCUSDTPERP':
                 orders_sell_btc = Ordenes(recive['ticker'])
-                orders_sell_btc.create_order('SELL', recive['price'])
+                try:
+                    leverage = recive["leverage"]
+                except:
+                    leverage = symbols[recive['ticker'].replace(
+                        'PERP', '')]['leverage']
+                orders_sell_btc.create_order(
+                    'SELL', recive['price'], int(leverage))
                 mensaje = 'Se realizo una orden en short BTC'
                 try:
                     del orders_buy_btc
@@ -332,7 +379,13 @@ if __name__ == "__main__":
                     pass
             elif recive['position'] == '-1' and recive['order'] == 'sell' and recive['ticker'] == 'XRPUSDTPERP':
                 orders_sell_xrp = Ordenes(recive['ticker'])
-                orders_sell_xrp.create_order('SELL', recive['price'])
+                try:
+                    leverage = recive["leverage"]
+                except:
+                    leverage = symbols[recive['ticker'].replace(
+                        'PERP', '')]['leverage']
+                orders_sell_xrp.create_order(
+                    'SELL', recive['price'], int(leverage))
                 mensaje = 'Se realizo una orden en short XRP'
                 try:
                     del orders_buy_xrp
@@ -340,7 +393,13 @@ if __name__ == "__main__":
                     pass
             elif recive['position'] == '-1' and recive['order'] == 'sell' and recive['ticker'] == 'ETHUSDTPERP':
                 orders_sell_eth = Ordenes(recive['ticker'])
-                orders_sell_eth.create_order('SELL', recive['price'])
+                try:
+                    leverage = recive["leverage"]
+                except:
+                    leverage = symbols[recive['ticker'].replace(
+                        'PERP', '')]['leverage']
+                orders_sell_eth.create_order(
+                    'SELL', recive['price'], int(leverage))
                 mensaje = 'Se realizo una orden en short ETH'
                 try:
                     del orders_buy_eth
@@ -352,5 +411,6 @@ if __name__ == "__main__":
 # ----------json recepción
 '''
 Envio del dato desde el cliente, de esta manera
-{"order":"{{strategy.order.action}}","position":"{{plot_15}}","ticker":"{{ticker}}","price":"{{close}}"}
+{"order":"{{strategy.order.action}}","position":"{{plot_15}}","ticker":"{{ticker}}","price":"{{close}}"
+,"leverage":{{leverage}}}
 '''
