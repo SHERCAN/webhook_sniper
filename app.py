@@ -49,30 +49,35 @@ class Ordenes:
         self.cliente = Cliente(symbol.replace('PERP', ''))
         self.message = Mensaje()
 
-    def create_order(self, position: str, close: str, leverage: int):
+    def create_order(self, position: str, close: str, leverage: int=2):
         '''Creación de la orden que llega desde el webhook'''
+        quan_before=0.0
+        
         if symbols[self.cliente.symbol]['quantity'] != 0:
             quan_before = float(symbols[self.cliente.symbol]['quantity'])
 
         if symbols[self.cliente.symbol]['leverage'] != leverage:
             symbols[self.cliente.symbol]['leverage'] = leverage
-
-            if quan_before != 0:
+            
+            if quan_before != 0.0:
                 try:
+                    '''Weight:1'''
                     order = self.cliente.client.futures_create_order(
                         symbol=symbols[self.cliente.symbol]['symbol'],
                         side=position,
                         type='MARKET',
                         quantity=str(quan_before)[0:symbols[self.cliente.symbol]["accuracy"]])
                     sleep(0.1)
+                    quan_before=0.0
                 except Exception as e:
                     print(symbols[self.cliente.symbol]['symbol'], position, 'MARKET', str(
                         quantity_n)[0:symbols[self.cliente.symbol]["accuracy"]])
                     self.message.send('El error en compra fue '+str(e))
-                self.cliente.client.futures_change_leverage(
-                    symbol=symbols[self.cliente.symbol]['symbol'],
-                    leverage=leverage)
-
+                '''Weight:1'''
+            self.cliente.client.futures_change_leverage(symbol=symbols[self.cliente.symbol]['symbol'],leverage=leverage)
+                
+        #posibilidad de quitar
+        '''weight:5'''
         list_balance = self.cliente.client.futures_account_balance()
         balance = float([x['balance']
                         for x in list_balance if x['asset'] == 'USDT'][0])
@@ -82,6 +87,7 @@ class Ordenes:
         if symbols[self.cliente.symbol]['id'] != 0:
             quantity_n = str(float(quantity_n)+quan_before)
         try:
+            '''Weight:1'''
             order = self.cliente.client.futures_create_order(
                 symbol=symbols[self.cliente.symbol]['symbol'],
                 side=position,
@@ -94,9 +100,11 @@ class Ordenes:
 
         sleep(1)
         try:
+            '''Weight:1'''
             self.cliente.client.futures_cancel_all_open_orders(
                 symbol=symbols[self.cliente.symbol]['symbol'])
             sleep(0.5)
+            '''Weight:5'''
             posicion = self.cliente.client.futures_position_information(
                 symbol=symbols[self.cliente.symbol]['symbol'])[0]['positionAmt']
         except:
@@ -124,6 +132,7 @@ class Ordenes:
                 symbols[self.cliente.symbol]['price']*(1+symbols[self.cliente.symbol]['stop']), symbols[self.cliente.symbol]["round"])
 
         try:
+            '''Weight:1'''
             stop = self.cliente.client.futures_create_order(
                 symbol=symbols[self.cliente.symbol]['symbol'],
                 side=pos,
@@ -157,6 +166,7 @@ class Ordenes:
             price = round(
                 symbols[self.cliente.symbol]['price']*(1-symbols[self.cliente.symbol]['take_s']), symbols[self.cliente.symbol]["round"])
         try:
+            '''Weight:1'''
             take = self.cliente.client.futures_create_order(
                 symbol=symbols[self.cliente.symbol]['symbol'],
                 side=pos,
@@ -181,8 +191,8 @@ class Ordenes:
             sleep(0.5)
             while True:
                 try:
-                    order = self.cliente.client.futures_get_order(
-                        orderId=order_id, symbol=symbols[self.cliente.symbol]['symbol'])
+                    '''Weight:1'''
+                    order = self.cliente.client.futures_get_order(orderId=order_id, symbol=symbols[self.cliente.symbol]['symbol'])
                     symbols[self.cliente.symbol]['id'] = order['orderId']
                     symbols[self.cliente.symbol]['side'] = order['side']
                     break
@@ -204,40 +214,43 @@ class Ordenes:
                     symbols[self.cliente.symbol]['side'])
                 price_take = self.take_profit(
                     symbols[self.cliente.symbol]['side'])
-                self.message.send(order['positionSide']+' en '+symbols[self.cliente.symbol]['symbol']+' el precio de compra fue ' + str(
-                    symbols[self.cliente.symbol]["price"])+' el precio del stop es '+str(price_stop)+' y el precio del take es de '+str(price_take))
+                self.message.send(order['side']+' en '+symbols[self.cliente.symbol]['symbol']+' a ' + str(
+                    symbols[self.cliente.symbol]["price"])+' con sl de '+str(price_stop)+' y tp de '+str(price_take))
                 now = dt.datetime.now(tz=dt.timezone(offset=dt.timedelta(
-                    hours=-5))).replace(microsecond=0).isoformat()
-                print(str(now), order['positionSide']+' en '+symbols[self.cliente.symbol]['symbol']+' el precio de compra fue ' + str(
-                    symbols[self.cliente.symbol]["price"])+' el precio del stop es '+str(price_stop)+' y el precio del take es de '+str(price_take))
+                    hours=-5))).replace(microsecond=0).isoformat() 
+                print(str(now), order['side']+' en '+symbols[self.cliente.symbol]['symbol']+' a ' + str(
+                    symbols[self.cliente.symbol]["price"])+' con sl de '+str(price_stop)+' y tp de '+str(price_take))
                 break
 
             if (order['status'] == 'FILLED' and intro == 'stop'):
+                '''Weight:1'''
                 self.cliente.client.futures_cancel_all_open_orders(
                     symbol=symbols[self.cliente.symbol]['symbol'])
                 symbols[self.cliente.symbol]['id'] = 0
                 symbols[self.cliente.symbol]['quantity'] = 0.0
-                self.message.send('Se tomo el stop loss de ' +
+                self.message.send('Se tomo el sl de ' +
                                   symbols[self.cliente.symbol]['symbol'])
                 now = dt.datetime.now(tz=dt.timezone(offset=dt.timedelta(
                     hours=-5))).replace(microsecond=0).isoformat()
-                print(str(now), 'Se tomo el stop loss de ' +
+                print(str(now), 'Se tomo el sl de ' +
                       symbols[self.cliente.symbol]['symbol'])
                 break
 
             if (order['status'] == 'FILLED' and intro == 'take'):
+                '''Weight:1'''
                 self.cliente.client.futures_cancel_all_open_orders(
                     symbol=symbols[self.cliente.symbol]['symbol'])
                 symbols[self.cliente.symbol]['id'] = 0
                 symbols[self.cliente.symbol]['quantity'] = 0.0
-                self.message.send('Se tomo el take profit de ' +
+                self.message.send('Se tomo el tp de ' +
                                   symbols[self.cliente.symbol]['symbol'])
                 now = dt.datetime.now(tz=dt.timezone(offset=dt.timedelta(
                     hours=-5))).replace(microsecond=0).isoformat()
-                print(str(now), 'Se tomo el take profit de ' +
+                print(str(now), 'Se tomo el tp de ' +
                       symbols[self.cliente.symbol]['symbol'])
                 break
             if order['status'] == 'CANCELED':
+                '''Weight:1'''
                 self.cliente.client.futures_cancel_all_open_orders(
                     symbol=symbols[self.cliente.symbol]['symbol'])
                 break
@@ -262,6 +275,7 @@ class All_time:
             if self.hour_before != hour_now and hour_now%6==0:
                 sleep(20)
                 cliente = Cliente('BNBUSDT')
+                '''weight:5'''
                 list_balance = cliente.client.futures_account_balance()
                 balance = float([x['balance']
                     for x in list_balance if x['asset'] == 'USDT'][0])
@@ -273,6 +287,7 @@ class All_time:
 if __name__ == "__main__":
     from waitress import serve
     cliente = Cliente('BNBUSDT')
+    '''weight:5'''
     list_balance = cliente.client.futures_account_balance()
     balance = float([x['balance']
                     for x in list_balance if x['asset'] == 'USDT'][0])
@@ -280,11 +295,14 @@ if __name__ == "__main__":
     mensaje.send(f'Tu balance es de {round(balance,2)} USDT')
     del mensaje
     for i in list_symbols:
+        '''Weight:1'''
         cliente.client.futures_change_leverage(
             symbol=i, leverage=symbols[i]['leverage'])
+        '''Weight:5'''
         info_coin = cliente.client.futures_position_information(symbol=i)
         cant_pos = float(info_coin[0]['positionAmt'])
         if cant_pos != 0:
+            '''Weight:1'''
             cliente.client.futures_cancel_all_open_orders(symbol=i)
             if cant_pos > 0:
                 symbols[i]['price'] = float(info_coin[0]['entryPrice'])
@@ -326,8 +344,7 @@ if __name__ == "__main__":
                 try:
                     leverage = recive["leverage"]
                 except:
-                    leverage = symbols[recive['ticker'].replace(
-                        'PERP', '')]['leverage']
+                    leverage = symbols[recive['ticker'].replace('PERP', '')]['leverage']
                 orders_buy_btc.create_order(
                     'BUY', recive['price'], int(leverage))
                 mensaje = 'Se realizo una orden en long BTC'
@@ -340,10 +357,8 @@ if __name__ == "__main__":
                 try:
                     leverage = recive["leverage"]
                 except:
-                    leverage = symbols[recive['ticker'].replace(
-                        'PERP', '')]['leverage']
-                orders_buy_xrp.create_order(
-                    'BUY', recive['price'], int(leverage))
+                    leverage = symbols[recive['ticker'].replace('PERP', '')]['leverage']
+                orders_buy_xrp.create_order('BUY', recive['price'], int(leverage))
                 mensaje = 'Se realizo una orden en long XRP'
                 try:
                     del orders_sell_xrp
@@ -354,8 +369,7 @@ if __name__ == "__main__":
                 try:
                     leverage = recive["leverage"]
                 except:
-                    leverage = symbols[recive['ticker'].replace(
-                        'PERP', '')]['leverage']
+                    leverage = symbols[recive['ticker'].replace('PERP', '')]['leverage']
                 orders_buy_eth.create_order(
                     'BUY', recive['price'], int(leverage))
                 mensaje = 'Se realizo una orden en long ETH'
@@ -368,8 +382,7 @@ if __name__ == "__main__":
                 try:
                     leverage = recive["leverage"]
                 except:
-                    leverage = symbols[recive['ticker'].replace(
-                        'PERP', '')]['leverage']
+                    leverage = symbols[recive['ticker'].replace('PERP', '')]['leverage']
                 orders_sell_btc.create_order(
                     'SELL', recive['price'], int(leverage))
                 mensaje = 'Se realizo una orden en short BTC'
@@ -412,5 +425,5 @@ if __name__ == "__main__":
 '''
 Envio del dato desde el cliente, de esta manera
 {"order":"{{strategy.order.action}}","position":"{{plot_15}}","ticker":"{{ticker}}","price":"{{close}}"
-,"leverage":{{leverage}}}
+,"leverage":{{strategy.order.comment}}}
 '''
