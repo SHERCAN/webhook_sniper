@@ -11,7 +11,7 @@ from flask import Flask, request, render_template
 #-----------------Variables globales-----------------------
 
 balance = 0.0
-list_symbols = ['BTCUSDT', 'ETHUSDT', 'XRPUSDT']
+list_symbols = ['BTCUSDT', 'LTCUSDT']
 with open('datos.json') as json_file:
     symbols = load(json_file)
 
@@ -76,11 +76,7 @@ class Ordenes:
                 '''Weight:1'''
             self.cliente.client.futures_change_leverage(symbol=symbols[self.cliente.symbol]['symbol'],leverage=leverage)
                 
-        #posibilidad de quitar
-        '''weight:5'''
-        list_balance = self.cliente.client.futures_account_balance()
-        balance = float([x['balance']
-                        for x in list_balance if x['asset'] == 'USDT'][0])
+        balance = update.balance*0.8
         quantity_n = str(((balance/5)*symbols[self.cliente.symbol]['leverage'])/float(
             close))[0:symbols[self.cliente.symbol]["accuracy"]]
 
@@ -97,6 +93,7 @@ class Ordenes:
             print(symbols[self.cliente.symbol]['symbol'], position, 'MARKET', str(
                 quantity_n)[0:symbols[self.cliente.symbol]["accuracy"]])
             self.message.send('El error en compra fue '+str(e))
+            order['orderId']=0
 
         sleep(1)
         try:
@@ -121,15 +118,15 @@ class Ordenes:
         if position == 'BUY':
             pos = 'SELL'
             stop = round(
-                symbols[self.cliente.symbol]['price']*(1.002-symbols[self.cliente.symbol]['stop']), symbols[self.cliente.symbol]["round"])
+                symbols[self.cliente.symbol]['price']*(1.002-symbols[self.cliente.symbol]['stop_l']), symbols[self.cliente.symbol]["round"])
             price = round(
-                symbols[self.cliente.symbol]['price']*(1-symbols[self.cliente.symbol]['stop']), symbols[self.cliente.symbol]["round"])
+                symbols[self.cliente.symbol]['price']*(1-symbols[self.cliente.symbol]['stop_l']), symbols[self.cliente.symbol]["round"])
         elif position == 'SELL':
             pos = 'BUY'
             stop = round(
-                symbols[self.cliente.symbol]['price']*(0.998+symbols[self.cliente.symbol]['stop']), symbols[self.cliente.symbol]["round"])
+                symbols[self.cliente.symbol]['price']*(0.998+symbols[self.cliente.symbol]['stop_s']), symbols[self.cliente.symbol]["round"])
             price = round(
-                symbols[self.cliente.symbol]['price']*(1+symbols[self.cliente.symbol]['stop']), symbols[self.cliente.symbol]["round"])
+                symbols[self.cliente.symbol]['price']*(1+symbols[self.cliente.symbol]['stop_s']), symbols[self.cliente.symbol]["round"])
 
         try:
             '''Weight:1'''
@@ -261,10 +258,11 @@ class Ordenes:
 #-----------------------Evenetos que tienen que estar repitiendose por un largo tiempo.------------
 
 class All_time:
-   
     def __init__(self) -> None:
         self.hour_before=dt.datetime.now().hour
         self.message = Mensaje()
+        self.balance=0.0
+        self.inicio()
         self.thread = Thread(target=self.hora)
         self.thread.start()
 
@@ -272,32 +270,37 @@ class All_time:
         '''Envío de mensaje al grupo de Telegram del saldo'''
         while True:
             hour_now = dt.datetime.now().hour
-            if self.hour_before != hour_now and hour_now%6==0:
+            if self.hour_before != hour_now and hour_now%4==0:
                 sleep(20)
                 cliente = Cliente('BNBUSDT')
                 '''weight:5'''
                 list_balance = cliente.client.futures_account_balance()
-                balance = float([x['balance']
-                    for x in list_balance if x['asset'] == 'USDT'][0])
-                self.message.send(f'Tu balance es de {round(balance,2)} USDT')
+                self.balance = float([x['balance']for x in list_balance if x['asset'] == 'USDT'][0])
+                self.message.send(f'Tu balance es de {round(self.balance,2)} USDT')
                 self.hour_before = hour_now
                 del cliente
+    def inicio(self):
+        '''Envío de mensaje al grupo de Telegram del saldo inicial'''
+        cliente = Cliente('BNBUSDT')
+        '''weight:5'''
+        list_balance = cliente.client.futures_account_balance()
+        self.balance = float([x['balance']for x in list_balance if x['asset'] == 'USDT'][0])
+        self.message.send(f'Tu balance es de {round(self.balance,2)} USDT')
+        del cliente
             
 #-----------------------------------inicio de programa
 if __name__ == "__main__":
     from waitress import serve
     cliente = Cliente('BNBUSDT')
     '''weight:5'''
-    list_balance = cliente.client.futures_account_balance()
-    balance = float([x['balance']
-                    for x in list_balance if x['asset'] == 'USDT'][0])
-    mensaje = Mensaje()
-    mensaje.send(f'Tu balance es de {round(balance,2)} USDT')
-    del mensaje
+    update = All_time()
     for i in list_symbols:
-        '''Weight:1'''
-        cliente.client.futures_change_leverage(
-            symbol=i, leverage=symbols[i]['leverage'])
+        try:
+            '''Weight:1'''
+            cliente.client.futures_change_leverage(
+                symbol=i, leverage=symbols[i]['leverage'])
+        except:
+            pass
         '''Weight:5'''
         info_coin = cliente.client.futures_position_information(symbol=i)
         cant_pos = float(info_coin[0]['positionAmt'])
@@ -324,7 +327,7 @@ if __name__ == "__main__":
         hours=-5))).replace(microsecond=0).isoformat()
     print('Inicio', str(balance), str(now))
     del cliente
-    update = All_time()
+    
 # -----INICIO DEL BACKEND------
     app = Flask(__name__)
 
@@ -339,7 +342,7 @@ if __name__ == "__main__":
         if request.method == 'POST':
             recive = request.json
 
-            if recive['position'] == '1' and recive['order'] == 'buy' and recive['ticker'] == 'BTCUSDTPERP':
+            if recive['position'] == 'long' and recive['order'] == 'buy' and recive['ticker'] == 'BTCUSDTPERP':
                 orders_buy_btc = Ordenes(recive['ticker'])
                 try:
                     leverage = recive["leverage"]
@@ -352,19 +355,19 @@ if __name__ == "__main__":
                     del orders_sell_btc
                 except:
                     pass
-            elif recive['position'] == '1' and recive['order'] == 'buy' and recive['ticker'] == 'XRPUSDTPERP':
-                orders_buy_xrp = Ordenes(recive['ticker'])
+            elif recive['position'] == 'long' and recive['order'] == 'buy' and recive['ticker'] == 'LTCUSDTPERP':
+                orders_buy_ltc = Ordenes(recive['ticker'])
                 try:
                     leverage = recive["leverage"]
                 except:
                     leverage = symbols[recive['ticker'].replace('PERP', '')]['leverage']
-                orders_buy_xrp.create_order('BUY', recive['price'], int(leverage))
-                mensaje = 'Se realizo una orden en long XRP'
+                orders_buy_ltc.create_order('BUY', recive['price'], int(leverage))
+                mensaje = 'Se realizo una orden en long LTC'
                 try:
-                    del orders_sell_xrp
+                    del orders_sell_ltc
                 except:
                     pass
-            elif recive['position'] == '1' and recive['order'] == 'buy' and recive['ticker'] == 'ETHUSDTPERP':
+            elif recive['position'] == 'long' and recive['order'] == 'buy' and recive['ticker'] == 'ETHUSDTPERP':
                 orders_buy_eth = Ordenes(recive['ticker'])
                 try:
                     leverage = recive["leverage"]
@@ -377,7 +380,7 @@ if __name__ == "__main__":
                     del orders_sell_eth
                 except:
                     pass
-            elif recive['position'] == '-1' and recive['order'] == 'sell' and recive['ticker'] == 'BTCUSDTPERP':
+            elif recive['position'] == 'short' and recive['order'] == 'sell' and recive['ticker'] == 'BTCUSDTPERP':
                 orders_sell_btc = Ordenes(recive['ticker'])
                 try:
                     leverage = recive["leverage"]
@@ -390,21 +393,21 @@ if __name__ == "__main__":
                     del orders_buy_btc
                 except:
                     pass
-            elif recive['position'] == '-1' and recive['order'] == 'sell' and recive['ticker'] == 'XRPUSDTPERP':
-                orders_sell_xrp = Ordenes(recive['ticker'])
+            elif recive['position'] == 'short' and recive['order'] == 'sell' and recive['ticker'] == 'LTCUSDTPERP':
+                orders_sell_ltc = Ordenes(recive['ticker'])
                 try:
                     leverage = recive["leverage"]
                 except:
                     leverage = symbols[recive['ticker'].replace(
                         'PERP', '')]['leverage']
-                orders_sell_xrp.create_order(
+                orders_sell_ltc.create_order(
                     'SELL', recive['price'], int(leverage))
-                mensaje = 'Se realizo una orden en short XRP'
+                mensaje = 'Se realizo una orden en short LTC'
                 try:
-                    del orders_buy_xrp
+                    del orders_buy_ltc
                 except:
                     pass
-            elif recive['position'] == '-1' and recive['order'] == 'sell' and recive['ticker'] == 'ETHUSDTPERP':
+            elif recive['position'] == 'short' and recive['order'] == 'sell' and recive['ticker'] == 'ETHUSDTPERP':
                 orders_sell_eth = Ordenes(recive['ticker'])
                 try:
                     leverage = recive["leverage"]
