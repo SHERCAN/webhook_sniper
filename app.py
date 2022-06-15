@@ -77,7 +77,7 @@ class Ordenes:
             self.cliente.client.futures_change_leverage(symbol=symbols[self.cliente.symbol]['symbol'],leverage=leverage)
                 
         balance = update.balance*0.8
-        quantity_n = str(((balance/5)*symbols[self.cliente.symbol]['leverage'])/float(
+        quantity_n = str(((balance/6)*symbols[self.cliente.symbol]['leverage'])/float(
             close))[0:symbols[self.cliente.symbol]["accuracy"]]
 
         if symbols[self.cliente.symbol]['id'] != 0:
@@ -325,7 +325,7 @@ if __name__ == "__main__":
                 orders_before.take_profit('SELL')
     now = dt.datetime.now(tz=dt.timezone(offset=dt.timedelta(
         hours=-5))).replace(microsecond=0).isoformat()
-    print('Inicio', str(balance), str(now))
+    print('Inicio', str(update.balance), str(now))
     del cliente
     
 # -----INICIO DEL BACKEND------
