@@ -47,8 +47,7 @@ class Mensaje:
 # --------------------Clase ordenes---------
 
 class Ordenes:
-    '''Esta clase es la que recibe todo y envía ordenes cacelaciones, etc.
-    '''
+    '''Esta clase es la que recibe todo y envía ordenes cacelaciones, etc.'''
 
     def __init__(self, symbol: str) -> None:
         self.cliente = Cliente(symbol.replace('PERP', ''))
