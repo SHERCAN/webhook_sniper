@@ -1,5 +1,6 @@
 # modules-----------------------------
 import sys
+from password import *
 from threading import Thread
 from json import load, dump
 from time import sleep
@@ -7,13 +8,16 @@ from requests import post
 from binance.client import Client
 import datetime as dt
 from flask import Flask, request, render_template
-
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives.hashes import SHA256
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from base64 import urlsafe_b64encode
 # -----------------Variables globales-----------------------
 
 balance = 0.0
 list_symbols = ['BTCUSDT', 'LTCUSDT', 'ETHUSDT', 'BNBUSDT']
 list_objects = []
-with open('datos.json') as json_file:
+with open('coins.json') as json_file:
     symbols = load(json_file)
 
 # ------------------clase cliente--------------------
@@ -26,7 +30,7 @@ class Cliente:
 
     def __init__(self, symbol: str) -> None:
         self.symbol = symbol
-        with open('datos.json') as json_file:
+        with open('users.json') as json_file:
             claves = load(json_file)
         self.client = Client(claves['shercan']['key'],
                              claves['shercan']['secret'])
@@ -305,7 +309,7 @@ class All_time:
                 self.hour_before = hour_now
                 if len(list_objects) > 5:
                     list_objects.pop(0)
-                with open("datos.json", "w") as write_file:
+                with open("coins.json", "w") as write_file:
                     dump(symbols, write_file)
                 del cliente
 
@@ -318,6 +322,24 @@ class All_time:
                              for x in list_balance if x['asset'] == 'USDT'][0])
         self.message.send(f'Tu balance es de {round(self.balance,2)} USDT')
         del cliente
+
+
+class Security:
+    def __init__(self) -> None:
+        self.key1 = pass1
+        self.Key2 = pass2
+
+    def decrypt(self, text):
+        kdf = PBKDF2HMAC(
+            algorithm=SHA256(),
+            length=32,
+            salt=self.Key2,
+            iterations=390000,)
+        key = urlsafe_b64encode(kdf.derive(self.key1))
+        fernet = Fernet(key)
+        textDecrypt = fernet.decrypt(text.encode())
+        return_text = textDecrypt.decode()
+        return return_text
 
 
 # -----------------------------------inicio de programa
@@ -364,7 +386,7 @@ if __name__ == "__main__":
 
     @app.route('/')
     def main():
-        return render_template('index.html')
+        return render_template('main.html')
 
     @app.route('/webhook', methods=['POST'])
     def webhook():
@@ -372,9 +394,8 @@ if __name__ == "__main__":
 
         if request.method == 'POST':
             recive = request.json
-
-            if list_symbols.count(recive['ticker'].replace('PERP', '')) > 0 and recive['cod'] == "techmasters":
-                ticker = recive['ticker'].replace('PERP', '')
+            ticker = recive['ticker'].replace('PERP', '')
+            if list_symbols.count(ticker) > 0 and recive['cod'] == "techmasters":
                 list_objects.append(Ordenes(ticker))
                 try:
                     leverage = recive["leverage"]
@@ -394,9 +415,36 @@ if __name__ == "__main__":
                                  ' con POST y ' + ticker)
 
             return mensaje
+
+    @app.route('/users_crud', methods=['POST'])
+    def files():
+        # {"crud":"crud","user":"user","key":"lajfo","secret":"iajdm"}
+        if request.method == 'POST':
+            reception = request.json
+            security = Security()
+            key = security.decrypt(reception['key'])
+            secret = security.decrypt(reception['secret'])
+            if reception['crud'] == "create" or reception['crud'] == "update":
+                with open('users.json') as json_file:
+                    users = load(json_file)
+                    users[reception['user']] = {'key': key,
+                                                'secret': secret}
+            if reception['crud'] == "delete":
+                with open('users.json') as json_file:
+                    users = load(json_file)
+                    users.pop(reception['user'])
+
+            with open("users.json", "w") as write_file:
+                dump(users, write_file)
+
     #app.run(host='127.0.0.1', port=80)
     serve(app, host='0.0.0.0', port=80, url_scheme='https')
 # ----------json recepción
+'''
+crud
+{"crud":"crud","user":"user","key":"lajfo","secret":"iajdm"}
+'''
+
 '''
 Envio del dato desde el cliente, de esta manera
 
