@@ -11,7 +11,7 @@ from flask import Flask, request, render_template
 # -----------------Variables globales-----------------------
 
 balance = 0.0
-list_symbols = ['BTCUSDTPERP', 'LTCUSDTPERP', 'ETHUSDTPERP', 'BNBUSDTPERP']
+list_symbols = ['BTCUSDT', 'LTCUSDT', 'ETHUSDT', 'BNBUSDT']
 list_objects = []
 with open('datos.json') as json_file:
     symbols = load(json_file)
@@ -50,7 +50,7 @@ class Ordenes:
     '''Esta clase es la que recibe todo y envía ordenes cacelaciones, etc.'''
 
     def __init__(self, symbol: str) -> None:
-        self.cliente = Cliente(symbol.replace('PERP', ''))
+        self.cliente = Cliente(symbol)
         self.message = Mensaje()
 
     def create_order(self, position: str, close: str, leverage: int = 2):
@@ -63,7 +63,11 @@ class Ordenes:
         if symbols[self.cliente.symbol]['leverage'] != leverage:
             symbols[self.cliente.symbol]['leverage'] = leverage
 
-            if quan_before != 0.0:
+            if symbols[self.cliente.symbol]['side'] == position:
+                self.cliente.client.futures_change_leverage(
+                symbol=symbols[self.cliente.symbol]['symbol'], leverage=leverage)
+
+            elif quan_before != 0.0:
                 try:
                     '''Weight:1'''
                     order = self.cliente.client.futures_create_order(
@@ -81,8 +85,8 @@ class Ordenes:
             self.cliente.client.futures_change_leverage(
                 symbol=symbols[self.cliente.symbol]['symbol'], leverage=leverage)
 
-        balance = update.balance*0.8
-        quantity_n = str(((balance/6)*symbols[self.cliente.symbol]['leverage'])/float(
+        balance = update.balance
+        quantity_n = str(((balance/4)*symbols[self.cliente.symbol]['leverage'])/float(
             close))[0:symbols[self.cliente.symbol]["accuracy"]]
 
         if symbols[self.cliente.symbol]['id'] != 0:
@@ -110,7 +114,10 @@ class Ordenes:
             posicion = self.cliente.client.futures_position_information(
                 symbol=symbols[self.cliente.symbol]['symbol'])[0]['positionAmt']
         except:
-            pass
+            print(symbols[self.cliente.symbol]['symbol'], position, 'MARKET', str(
+                quantity_n)[0:symbols[self.cliente.symbol]["accuracy"]])
+            self.message.send('El error en compra fue '+str(e))
+            order['orderId'] = 0
 
         symbols[self.cliente.symbol]['quantity'] = abs(float(posicion))
         symbols[self.cliente.symbol]['id'] = order['orderId']
@@ -135,7 +142,7 @@ class Ordenes:
 
         try:
             '''Weight:1'''
-            stop = self.cliente.client.futures_create_order(
+            loss = self.cliente.client.futures_create_order(
                 symbol=symbols[self.cliente.symbol]['symbol'],
                 side=pos,
                 type='STOP',
@@ -149,7 +156,7 @@ class Ordenes:
                   symbols[self.cliente.symbol]['quantity'], price, stop,)
             self.message.send('El error en stop fue '+str(e))
         order_exe = Thread(target=self.create_order_exe,
-                           args=(stop['orderId'], 'stop',))
+                           args=(loss['orderId'], 'stop',))
         order_exe.start()
         return price
 
@@ -356,28 +363,23 @@ if __name__ == "__main__":
 
         if request.method == 'POST':
             recive = request.json
-
-            if list_symbols.count(recive['ticker']) > 1 and recive['cod'] == "techmasters":
-                list_objects.append(Ordenes(recive['ticker']))
+            
+            if list_symbols.count(recive['ticker'].replace('PERP', '')) > 0 and recive['cod'] == "techmasters":
+                ticker=recive['ticker'].replace('PERP', '')
+                list_objects.append(Ordenes(ticker))
                 try:
                     leverage = recive["leverage"]
                 except:
-                    leverage = symbols[recive['ticker'].replace(
-                        'PERP', '')]['leverage']
+                    leverage = symbols[ticker]['leverage']
                 try:
-                    list_objects[-1].create_order(recive['order'].upper(),
-                                                  recive['price'], int(leverage))
-                    mensaje = 'Se realizo una orden en ' + \
-                        str(recive['position']) + \
-                        str(recive['ticker'].replace('PERP', ''))
+                    list_objects[-1].create_order(recive['order'].upper(),recive['price'], int(leverage))
+                    mensaje = 'Se realizo una orden en ' + str(recive['position']) + str(ticker)
                 except Exception as e:
                     message = Mensaje()
                     now = dt.datetime.now(tz=dt.timezone(offset=dt.timedelta(
                         hours=-5))).replace(microsecond=0).isoformat()
-                    print(str(now), 'Error '+str(e)+' con POST y ' +
-                          recive['ticker'].replace('PERP', ''))
-                    message.send(str(now), 'Error '+str(e)+' con POST y ' +
-                                 recive['ticker'].replace('PERP', ''))
+                    print(str(now), 'Error '+str(e)+' con POST y ' +ticker)
+                    message.send(str(now), 'Error '+str(e)+' con POST y ' +ticker)
 
             return mensaje
     #app.run(host='127.0.0.1', port=80)
