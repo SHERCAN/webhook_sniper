@@ -1,7 +1,7 @@
 # modules-----------------------------
 import sys
 from threading import Thread
-from json import load,dump
+from json import load, dump
 from time import sleep
 from requests import post
 from binance.client import Client
@@ -18,6 +18,7 @@ with open('datos.json') as json_file:
 
 # ------------------clase cliente--------------------
 
+
 class Cliente:
     """
     Esta clase genera el cliente con conexión a Binance
@@ -32,6 +33,7 @@ class Cliente:
 
 # -------------------Clase mensaje
 
+
 class Mensaje:
     '''
     Esta clase envía los mensajes a Telegram
@@ -45,6 +47,7 @@ class Mensaje:
              data={'chat_id': '-548326689', 'text': data})
 
 # --------------------Clase ordenes---------
+
 
 class Ordenes:
     '''Esta clase es la que recibe todo y envía ordenes cacelaciones, etc.'''
@@ -65,7 +68,7 @@ class Ordenes:
 
             if symbols[self.cliente.symbol]['side'] == position:
                 self.cliente.client.futures_change_leverage(
-                symbol=symbols[self.cliente.symbol]['symbol'], leverage=leverage)
+                    symbol=symbols[self.cliente.symbol]['symbol'], leverage=leverage)
 
             elif quan_before != 0.0:
                 try:
@@ -105,19 +108,21 @@ class Ordenes:
             order['orderId'] = 0
 
         sleep(1)
-        try:
-            '''Weight:1'''
-            self.cliente.client.futures_cancel_all_open_orders(
-                symbol=symbols[self.cliente.symbol]['symbol'])
-            sleep(0.5)
-            '''Weight:5'''
-            posicion = self.cliente.client.futures_position_information(
-                symbol=symbols[self.cliente.symbol]['symbol'])[0]['positionAmt']
-        except:
-            print(symbols[self.cliente.symbol]['symbol'], position, 'MARKET', str(
-                quantity_n)[0:symbols[self.cliente.symbol]["accuracy"]])
-            self.message.send('El error en compra fue '+str(e))
-            order['orderId'] = 0
+        while True:
+            try:
+                '''Weight:1'''
+                self.cliente.client.futures_cancel_all_open_orders(
+                    symbol=symbols[self.cliente.symbol]['symbol'])
+                sleep(0.5)
+                '''Weight:5'''
+                posicion = self.cliente.client.futures_position_information(
+                    symbol=symbols[self.cliente.symbol]['symbol'])[0]['positionAmt']
+                break
+            except:
+                print(symbols[self.cliente.symbol]['symbol'], position, 'MARKET', str(
+                    quantity_n)[0:symbols[self.cliente.symbol]["accuracy"]])
+                self.message.send('El error en compra fue '+str(e))
+                order['orderId'] = 0
 
         symbols[self.cliente.symbol]['quantity'] = abs(float(posicion))
         symbols[self.cliente.symbol]['id'] = order['orderId']
@@ -207,6 +212,10 @@ class Ordenes:
                     symbols[self.cliente.symbol]['side'] = order['side']
                     break
                 except Exception as e:
+                    posicion = self.cliente.client.futures_position_information(
+                        symbol=symbols[self.cliente.symbol]['symbol'])[0]['positionAmt']
+                    symbols[self.cliente.symbol]['quantity'] = abs(
+                        float(posicion))
                     now = dt.datetime.now(tz=dt.timezone(offset=dt.timedelta(
                         hours=-5))).replace(microsecond=0).isoformat()
                     print(str(now), 'Error '+str(e)+' con '+intro+' y ' +
@@ -363,23 +372,26 @@ if __name__ == "__main__":
 
         if request.method == 'POST':
             recive = request.json
-            
+
             if list_symbols.count(recive['ticker'].replace('PERP', '')) > 0 and recive['cod'] == "techmasters":
-                ticker=recive['ticker'].replace('PERP', '')
+                ticker = recive['ticker'].replace('PERP', '')
                 list_objects.append(Ordenes(ticker))
                 try:
                     leverage = recive["leverage"]
                 except:
                     leverage = symbols[ticker]['leverage']
                 try:
-                    list_objects[-1].create_order(recive['order'].upper(),recive['price'], int(leverage))
-                    mensaje = 'Se realizo una orden en ' + str(recive['position']) + str(ticker)
+                    list_objects[-1].create_order(recive['order'].upper(),
+                                                  recive['price'], int(leverage))
+                    mensaje = 'Se realizo una orden en ' + \
+                        str(recive['position']) + str(ticker)
                 except Exception as e:
                     message = Mensaje()
                     now = dt.datetime.now(tz=dt.timezone(offset=dt.timedelta(
                         hours=-5))).replace(microsecond=0).isoformat()
-                    print(str(now), 'Error '+str(e)+' con POST y ' +ticker)
-                    message.send(str(now), 'Error '+str(e)+' con POST y ' +ticker)
+                    print(str(now), 'Error '+str(e)+' con POST y ' + ticker)
+                    message.send(str(now), 'Error '+str(e) +
+                                 ' con POST y ' + ticker)
 
             return mensaje
     #app.run(host='127.0.0.1', port=80)
