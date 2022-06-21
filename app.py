@@ -89,8 +89,9 @@ class Ordenes:
                         quantity_n)[0:symbols[self.cliente.symbol]["accuracy"]])
                     self.message.send('El error en compra fue '+str(e))
                 '''Weight:1'''
-            self.cliente.client.futures_change_leverage(
-                symbol=symbols[self.cliente.symbol]['symbol'], leverage=leverage)
+                self.cliente.client.futures_change_leverage(
+                    symbol=symbols[self.cliente.symbol]['symbol'], leverage=leverage)
+                symbols[self.cliente.symbol]['leverage'] = leverage
 
         balance = update.balance
         quantity_n = str(((balance/4)*symbols[self.cliente.symbol]['leverage'])/float(
@@ -326,18 +327,26 @@ class All_time:
 
 class Security:
     def __init__(self) -> None:
-        self.key1 = pass1
-        self.Key2 = pass2
+        self.__key1 = pass1.encode()
+        self.__key2 = pass2.encode()
 
-    def decrypt(self, text):
+    def __get_fernet(self):
         kdf = PBKDF2HMAC(
             algorithm=SHA256(),
             length=32,
-            salt=self.Key2,
+            salt=self.__key2,
             iterations=390000,)
-        key = urlsafe_b64encode(kdf.derive(self.key1))
+        key = urlsafe_b64encode(kdf.derive(self.__key1))
         fernet = Fernet(key)
-        textDecrypt = fernet.decrypt(text.encode())
+        return fernet
+
+    def decrypt_api(self, text):
+        textDecrypt = self.__get_fernet().decrypt(text.encode())
+        return_text = textDecrypt.decode()
+        return return_text
+
+    def encrypt_api(self, text):
+        textDecrypt = self.__get_fernet().encrypt(text.encode())
         return_text = textDecrypt.decode()
         return return_text
 
@@ -345,41 +354,41 @@ class Security:
 # -----------------------------------inicio de programa
 if __name__ == "__main__":
     from waitress import serve
-    cliente = Cliente('BNBUSDT')
-    update = All_time()
-    for i in list_symbols:
-        try:
-            '''Weight:1'''
-            cliente.client.futures_change_leverage(
-                symbol=i, leverage=symbols[i]['leverage'])
-        except:
-            pass
-        '''Weight:5'''
-        info_coin = cliente.client.futures_position_information(symbol=i)
-        cant_pos = float(info_coin[0]['positionAmt'])
-        if cant_pos != 0:
-            '''Weight:1'''
-            cliente.client.futures_cancel_all_open_orders(symbol=i)
-            if cant_pos > 0:
-                symbols[i]['price'] = float(info_coin[0]['entryPrice'])
-                symbols[i]['quote'] = float(
-                    info_coin[0]['isolatedWallet'])*0.9996
-                symbols[i]['quantity'] = abs(cant_pos)
-                symbols[i]['id'] = 100
-                orders_before = Ordenes(i)
-                orders_before.stop_loss('BUY')
-                orders_before.take_profit('BUY')
-            else:
-                symbols[i]['price'] = float(info_coin[0]['entryPrice'])
-                symbols[i]['quantity'] = abs(cant_pos)
-                symbols[i]['id'] = 100
-                orders_before = Ordenes(i)
-                orders_before.stop_loss('SELL')
-                orders_before.take_profit('SELL')
-    now = dt.datetime.now(tz=dt.timezone(offset=dt.timedelta(
-        hours=-5))).replace(microsecond=0).isoformat()
-    print('Inicio', str(update.balance), str(now))
-    del cliente
+    #cliente = Cliente('BNBUSDT')
+    #update = All_time()
+    # for i in list_symbols:
+    #     try:
+    #         '''Weight:1'''
+    #         cliente.client.futures_change_leverage(
+    #             symbol=i, leverage=symbols[i]['leverage'])
+    #     except:
+    #         pass
+    #     '''Weight:5'''
+    #     info_coin = cliente.client.futures_position_information(symbol=i)
+    #     cant_pos = float(info_coin[0]['positionAmt'])
+    #     if cant_pos != 0:
+    #         '''Weight:1'''
+    #         cliente.client.futures_cancel_all_open_orders(symbol=i)
+    #         if cant_pos > 0:
+    #             symbols[i]['price'] = float(info_coin[0]['entryPrice'])
+    #             symbols[i]['quote'] = float(
+    #                 info_coin[0]['isolatedWallet'])*0.9996
+    #             symbols[i]['quantity'] = abs(cant_pos)
+    #             symbols[i]['id'] = 100
+    #             orders_before = Ordenes(i)
+    #             orders_before.stop_loss('BUY')
+    #             orders_before.take_profit('BUY')
+    #         else:
+    #             symbols[i]['price'] = float(info_coin[0]['entryPrice'])
+    #             symbols[i]['quantity'] = abs(cant_pos)
+    #             symbols[i]['id'] = 100
+    #             orders_before = Ordenes(i)
+    #             orders_before.stop_loss('SELL')
+    #             orders_before.take_profit('SELL')
+    #now = dt.datetime.now(tz=dt.timezone(offset=dt.timedelta(
+    #     hours=-5))).replace(microsecond=0).isoformat()
+    #print('Inicio', str(update.balance), str(now))
+    #del cliente
 
 # -----INICIO DEL BACKEND------
     app = Flask(__name__)
@@ -395,12 +404,14 @@ if __name__ == "__main__":
         if request.method == 'POST':
             recive = request.json
             ticker = recive['ticker'].replace('PERP', '')
-            if list_symbols.count(ticker) > 0 and recive['cod'] == "techmasters":
+            if ((list_symbols.count(ticker) > 0 and recive['cod'] == "techmasters")
+             and (recive['position'] == 'short' or recive['position'] == 'long')):
                 list_objects.append(Ordenes(ticker))
                 try:
                     leverage = recive["leverage"]
                 except:
                     leverage = symbols[ticker]['leverage']
+                    print(leverage,symbols[ticker]['leverage'],recive["leverage"])
                 try:
                     list_objects[-1].create_order(recive['order'].upper(),
                                                   recive['price'], int(leverage))
@@ -422,8 +433,8 @@ if __name__ == "__main__":
         if request.method == 'POST':
             reception = request.json
             security = Security()
-            key = security.decrypt(reception['key'])
-            secret = security.decrypt(reception['secret'])
+            key = security.decrypt_api(reception['key'])
+            secret = security.decrypt_api(reception['secret'])
             if reception['crud'] == "create" or reception['crud'] == "update":
                 with open('users.json') as json_file:
                     users = load(json_file)
@@ -437,8 +448,8 @@ if __name__ == "__main__":
             with open("users.json", "w") as write_file:
                 dump(users, write_file)
 
-    #app.run(host='127.0.0.1', port=80)
-    serve(app, host='0.0.0.0', port=80, url_scheme='https')
+    app.run(host='127.0.0.1', port=8080)
+    #serve(app, host='0.0.0.0', port=80, url_scheme='https')
 # ----------json recepción
 '''
 crud
