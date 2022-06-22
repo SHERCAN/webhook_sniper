@@ -4,3 +4,4 @@ webapp
 *.csv
 *.xlsx
 password.py
+__pycache__

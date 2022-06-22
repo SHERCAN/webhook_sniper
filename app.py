@@ -1,5 +1,6 @@
 # modules-----------------------------
 import sys
+from turtle import update
 from password import *
 from threading import Thread
 from json import load, dump
@@ -17,6 +18,7 @@ from base64 import urlsafe_b64encode
 balance = 0.0
 list_symbols = ['BTCUSDT', 'LTCUSDT', 'ETHUSDT', 'BNBUSDT']
 list_objects = []
+#users----{'raul':{'key':'hsdfljqr','secret':'jifwerc'},...}
 with open('coins.json') as json_file:
     symbols = load(json_file)
 
@@ -28,12 +30,10 @@ class Cliente:
     Esta clase genera el cliente con conexión a Binance
     """
 
-    def __init__(self, symbol: str) -> None:
+    def __init__(self, symbol: str,id:str) -> None:
         self.symbol = symbol
-        with open('users.json') as json_file:
-            claves = load(json_file)
-        self.client = Client(claves['shercan']['key'],
-                             claves['shercan']['secret'])
+        self.apis=update.claves[id]
+        self.client = Client(self.apis['key'],self.apis['secret'])
 
 # -------------------Clase mensaje
 
@@ -56,8 +56,8 @@ class Mensaje:
 class Ordenes:
     '''Esta clase es la que recibe todo y envía ordenes cacelaciones, etc.'''
 
-    def __init__(self, symbol: str) -> None:
-        self.cliente = Cliente(symbol)
+    def __init__(self, symbol: str,id:int) -> None:
+        self.cliente = Cliente(symbol,id)
         self.message = Mensaje()
 
     def create_order(self, position: str, close: str, leverage: int = 2):
@@ -290,10 +290,12 @@ class All_time:
         self.hour_before = dt.datetime.now().hour
         self.message = Mensaje()
         self.balance = 0.0
+        self.claves={}
+        self.users=[]
         self.inicio()
         self.thread = Thread(target=self.hora)
         self.thread.start()
-
+    
     def hora(self):
         '''Envío de mensaje al grupo de Telegram del saldo'''
         while True:
@@ -312,6 +314,10 @@ class All_time:
                     list_objects.pop(0)
                 with open("coins.json", "w") as write_file:
                     dump(symbols, write_file)
+
+                with open('users.json') as json_file:
+                    self.claves = load(json_file)
+                    self.users=(list(self.claves.keys()))
                 del cliente
 
     def inicio(self):
@@ -355,7 +361,7 @@ class Security:
 if __name__ == "__main__":
     from waitress import serve
     #cliente = Cliente('BNBUSDT')
-    #update = All_time()
+    update = All_time()
     # for i in list_symbols:
     #     try:
     #         '''Weight:1'''
@@ -406,24 +412,25 @@ if __name__ == "__main__":
             ticker = recive['ticker'].replace('PERP', '')
             if ((list_symbols.count(ticker) > 0 and recive['cod'] == "techmasters")
              and (recive['position'] == 'short' or recive['position'] == 'long')):
-                list_objects.append(Ordenes(ticker))
-                try:
-                    leverage = recive["leverage"]
-                except:
-                    leverage = symbols[ticker]['leverage']
-                    print(leverage,symbols[ticker]['leverage'],recive["leverage"])
-                try:
-                    list_objects[-1].create_order(recive['order'].upper(),
-                                                  recive['price'], int(leverage))
-                    mensaje = 'Se realizo una orden en ' + \
-                        str(recive['position']) + str(ticker)
-                except Exception as e:
-                    message = Mensaje()
-                    now = dt.datetime.now(tz=dt.timezone(offset=dt.timedelta(
-                        hours=-5))).replace(microsecond=0).isoformat()
-                    print(str(now), 'Error '+str(e)+' con POST y ' + ticker)
-                    message.send(str(now), 'Error '+str(e) +
-                                 ' con POST y ' + ticker)
+                for i in update.users:
+                    list_objects.append(Ordenes(ticker,i))
+                    try:
+                        leverage = recive["leverage"]
+                    except:
+                        leverage = symbols[ticker]['leverage']
+                        print(leverage,symbols[ticker]['leverage'],recive["leverage"])
+                    try:
+                        list_objects[-1].create_order(recive['order'].upper(),
+                                                    recive['price'], int(leverage))
+                        mensaje = 'Se realizo una orden en ' + \
+                            str(recive['position']) + str(ticker)
+                    except Exception as e:
+                        message = Mensaje()
+                        now = dt.datetime.now(tz=dt.timezone(offset=dt.timedelta(
+                            hours=-5))).replace(microsecond=0).isoformat()
+                        print(str(now), 'Error '+str(e)+' con POST y ' + ticker)
+                        message.send(str(now), 'Error '+str(e) +
+                                    ' con POST y ' + ticker)
 
             return mensaje
 
@@ -431,24 +438,29 @@ if __name__ == "__main__":
     def files():
         # {"crud":"crud","user":"user","key":"lajfo","secret":"iajdm"}
         if request.method == 'POST':
+            mensaje=''
             reception = request.json
             security = Security()
-            key = security.decrypt_api(reception['key'])
-            secret = security.decrypt_api(reception['secret'])
+            key =reception['key'] #security.decrypt_api(reception['key'])
+            secret =reception['secret'] #security.decrypt_api(reception['secret'])
             if reception['crud'] == "create" or reception['crud'] == "update":
                 with open('users.json') as json_file:
-                    users = load(json_file)
-                    users[reception['user']] = {'key': key,
+                    users_post = load(json_file)
+                    users_post[reception['user']] = {'key': key,
                                                 'secret': secret}
+                mensaje='create sucessfully'
             if reception['crud'] == "delete":
                 with open('users.json') as json_file:
-                    users = load(json_file)
-                    users.pop(reception['user'])
+                    users_post = load(json_file)
+                    users_post.pop(reception['user'])
+                mensaje='delete sucessfully'
 
             with open("users.json", "w") as write_file:
                 dump(users, write_file)
 
-    app.run(host='127.0.0.1', port=8080)
+            return mensaje
+
+    app.run(host='127.0.0.1', port=80)
     #serve(app, host='0.0.0.0', port=80, url_scheme='https')
 # ----------json recepción
 '''
