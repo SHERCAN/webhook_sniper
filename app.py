@@ -1,6 +1,5 @@
 # modules-----------------------------
 import sys
-from turtle import update
 from password import *
 from threading import Thread
 from json import load, dump
@@ -16,21 +15,10 @@ from base64 import urlsafe_b64encode
 # -----------------Variables globales-----------------------
 
 list_objects = []
-#users----{'raul':{'key':'hsdfljqr','secret':'jifwerc'},...}
+# users----{'raul':{'key':'hsdfljqr','secret':'jifwerc'},...}
 
 # ------------------clase cliente--------------------
-
-class Cliente:
-    """
-    Esta clase genera el cliente con conexión a Binance
-    """
-
-    def __init__(self, symbol: str,id:str) -> None:
-        self.symbol = symbol
-        self.apis=update.claves[id]
-        self.client = Client(self.apis['key'],self.apis['secret'])
-
-# -------------------Clase mensaje
+# -----------------------Evenetos que tienen que estar repitiendose por un largo tiempo.------------
 
 class Mensaje:
     '''
@@ -44,13 +32,81 @@ class Mensaje:
         post('https://api.telegram.org/bot5243749301:AAHIDCwt13NLYpmJ7WVaJLs57G0Z_IyFTLE/sendMessage',
              data={'chat_id': '-548326689', 'text': data})
 
+class All_time:
+    def __init__(self) -> None:
+        self.hour_before = dt.datetime.now().hour
+        self.message = Mensaje()
+        self.balance = 0.0
+        self.list_symbols = []
+        self.symbols = {}
+        with open("coins.json") as js:
+            self.symbols = load(js)
+            self.list_symbols = (list(self.symbols.keys()))
+        self.claves = {}
+        self.users = []
+        with open('users.json') as json_file:
+            self.claves = load(json_file)
+            self.users = (list(self.claves.keys()))
+        #self.inicio()
+        self.thread = Thread(target=self.hora)
+        self.thread.start()
+
+    def hora(self):
+        '''Envío de mensaje al grupo de Telegram del saldo'''
+        while True:
+            hour_now = dt.datetime.now().hour
+            if self.hour_before != hour_now and hour_now % 4 == 0:
+                sleep(20)
+                cliente = Cliente('BNBUSDT')
+                '''weight:5'''
+                list_balance = cliente.client.futures_account_balance()
+                self.balance = float(
+                    [x['balance']for x in list_balance if x['asset'] == 'USDT'][0])
+                self.message.send(
+                    f'Tu balance es de {round(self.balance,2)} USDT')
+                self.hour_before = hour_now
+                if len(list_objects) > 5:
+                    list_objects.pop(0)
+                with open("coins.json", "w") as write_file:
+                    dump(self.symbols, write_file)
+                with open('users.json') as json_file:
+                    self.claves = load(json_file)
+                    self.users = (list(self.claves.keys()))
+                del cliente
+
+    def inicio(self):
+        '''Envío de mensaje al grupo de Telegram del saldo inicial'''
+        cliente = Cliente('BNBUSDT', 'shercan')
+        '''weight:5'''
+        list_balance = cliente.client.futures_account_balance()
+        self.balance = float([x['balance']
+                             for x in list_balance if x['asset'] == 'USDT'][0])
+        self.message.send(f'Tu balance es de {round(self.balance,2)} USDT')
+        del cliente
+
+update = All_time()
+class Cliente:
+    """
+    Esta clase genera el cliente con conexión a Binance
+    """
+
+    def __init__(self, symbol: str, id: str) -> None:
+        self.symbol = symbol
+        self.apis = update.claves[id]
+        self.client = Client(self.apis['key'], self.apis['secret'])
+
+# -------------------Clase mensaje
+
+
+
 # --------------------Clase ordenes---------
+
 
 class Ordenes:
     '''Esta clase es la que recibe todo y envía ordenes cacelaciones, etc.'''
 
-    def __init__(self, symbol: str,id:int) -> None:
-        self.cliente = Cliente(symbol,id)
+    def __init__(self, symbol: str, id: int) -> None:
+        self.cliente = Cliente(symbol, id)
         self.message = Mensaje()
 
     def create_order(self, position: str, close: str, leverage: int = 2):
@@ -58,11 +114,12 @@ class Ordenes:
         quan_before = 0.0
 
         if update.symbols[self.cliente.symbol]['quantity'] != 0:
-            quan_before = float(update.symbols[self.cliente.symbol]['quantity'])
-        #print(position,close,leverage)
-        #print(update.list_symbols,update.users,update.claves)
-        
-        if update.symbols[self.cliente.symbol]['leverage'] != leverage:                            
+            quan_before = float(
+                update.symbols[self.cliente.symbol]['quantity'])
+        # print(position,close,leverage)
+        # print(update.list_symbols,update.users,update.claves)
+
+        if update.symbols[self.cliente.symbol]['leverage'] != leverage:
             if quan_before != 0.0:
                 try:
                     '''Weight:1'''
@@ -78,7 +135,8 @@ class Ordenes:
                         quantity_n)[0:update.symbols[self.cliente.symbol]["accuracy"]])
                     self.message.send('El error en cierre '+str(e))
                 '''Weight:1'''
-            self.cliente.client.futures_change_leverage(symbol=update.symbols[self.cliente.symbol]['symbol'], leverage=leverage)
+            self.cliente.client.futures_change_leverage(
+                symbol=update.symbols[self.cliente.symbol]['symbol'], leverage=leverage)
             update.symbols[self.cliente.symbol]['leverage'] = leverage
 
         balance = update.balance
@@ -99,7 +157,7 @@ class Ordenes:
                 quantity_n)[0:update.symbols[self.cliente.symbol]["accuracy"]])
             self.message.send('El error en compra fue '+str(e))
             order['orderId'] = 0
-        
+
         sleep(1)
         while True:
             try:
@@ -270,60 +328,6 @@ class Ordenes:
             sleep(0.5)
         sys.exit()
 
-# -----------------------Evenetos que tienen que estar repitiendose por un largo tiempo.------------
-
-
-class All_time:
-    def __init__(self) -> None:
-        self.hour_before = dt.datetime.now().hour
-        self.message = Mensaje()
-        self.balance = 0.0
-        self.list_symbols=[]
-        self.symbols={}
-        with open("coins.json") as js:
-            self.symbols = load(js)
-            self.list_symbols=(list(self.symbols.keys()))
-        self.claves={}
-        self.users=[]
-        with open('users.json') as json_file:
-            self.claves = load(json_file)
-            self.users=(list(self.claves.keys()))
-        #self.inicio()
-        self.thread = Thread(target=self.hora)
-        self.thread.start()
-    
-    def hora(self):
-        '''Envío de mensaje al grupo de Telegram del saldo'''
-        while True:
-            hour_now = dt.datetime.now().hour
-            if self.hour_before != hour_now and hour_now % 4 == 0:
-                sleep(20)
-                cliente = Cliente('BNBUSDT')
-                '''weight:5'''
-                list_balance = cliente.client.futures_account_balance()
-                self.balance = float(
-                    [x['balance']for x in list_balance if x['asset'] == 'USDT'][0])
-                self.message.send(
-                    f'Tu balance es de {round(self.balance,2)} USDT')
-                self.hour_before = hour_now
-                if len(list_objects) > 5:
-                    list_objects.pop(0)
-                with open("coins.json", "w") as write_file:
-                    dump(self.symbols, write_file)
-                with open('users.json') as json_file:
-                    self.claves = load(json_file)
-                    self.users=(list(self.claves.keys()))
-                del cliente
-
-    def inicio(self):
-        '''Envío de mensaje al grupo de Telegram del saldo inicial'''
-        cliente = Cliente('BNBUSDT','shercan')
-        '''weight:5'''
-        list_balance = cliente.client.futures_account_balance()
-        self.balance = float([x['balance']
-                             for x in list_balance if x['asset'] == 'USDT'][0])
-        self.message.send(f'Tu balance es de {round(self.balance,2)} USDT')
-        del cliente
 
 
 class Security:
@@ -355,41 +359,10 @@ class Security:
 # -----------------------------------inicio de programa
 if __name__ == "__main__":
     from waitress import serve
-    cliente = Cliente('BNBUSDT')
-    update = All_time()
-    for i in update.list_symbols:
-        try:
-            '''Weight:1'''
-            cliente.client.futures_change_leverage(
-                symbol=i, leverage=update.symbols[i]['leverage'])
-        except:
-            pass
-        '''Weight:5'''
-        info_coin = cliente.client.futures_position_information(symbol=i)
-        cant_pos = float(info_coin[0]['positionAmt'])
-        if cant_pos != 0:
-            '''Weight:1'''
-            cliente.client.futures_cancel_all_open_orders(symbol=i)
-            if cant_pos > 0:
-                update.symbols[i]['price'] = float(info_coin[0]['entryPrice'])
-                update.symbols[i]['quote'] = float(
-                    info_coin[0]['isolatedWallet'])*0.9996
-                update.symbols[i]['quantity'] = abs(cant_pos)
-                update.symbols[i]['id'] = 100
-                orders_before = Ordenes(i)
-                orders_before.stop_loss('BUY')
-                orders_before.take_profit('BUY')
-            else:
-                update.symbols[i]['price'] = float(info_coin[0]['entryPrice'])
-                update.symbols[i]['quantity'] = abs(cant_pos)
-                update.symbols[i]['id'] = 100
-                orders_before = Ordenes(i)
-                orders_before.stop_loss('SELL')
-                orders_before.take_profit('SELL')
     now = dt.datetime.now(tz=dt.timezone(offset=dt.timedelta(
         hours=-5))).replace(microsecond=0).isoformat()
     print('Inicio', str(update.balance), str(now))
-    del cliente
+    
 # -----INICIO DEL BACKEND------
     app = Flask(__name__)
 
@@ -406,27 +379,29 @@ if __name__ == "__main__":
             ticker = recive['ticker'].replace('PERP', '')
             print(recive)
             if ((update.list_symbols.count(ticker) > 0 and recive['cod'] == "techmasters")
-             and (recive['position'] == 'short' or recive['position'] == 'long')):
+                    and (recive['position'] == 'short' or recive['position'] == 'long')):
                 print('entro')
                 for i in update.users:
-                    list_objects.append(Ordenes(ticker,i))
+                    list_objects.append(Ordenes(ticker, i))
                     try:
                         leverage = recive["leverage"]
                     except:
                         leverage = update.symbols[ticker]['leverage']
-                        print(leverage,update.symbols[ticker]['leverage'],recive["leverage"])
+                        print(
+                            leverage, update.symbols[ticker]['leverage'], recive["leverage"])
                     try:
                         list_objects[-1].create_order(recive['order'].upper(),
-                                                    recive['price'], int(leverage))
+                                                      recive['price'], int(leverage))
                         mensaje = 'Se realizo una orden en ' + \
                             str(recive['position']) + str(ticker)
                     except Exception as e:
                         message = Mensaje()
                         now = dt.datetime.now(tz=dt.timezone(offset=dt.timedelta(
                             hours=-5))).replace(microsecond=0).isoformat()
-                        print(str(now), 'Error '+str(e)+' con POST y ' + ticker)
+                        print(str(now), 'Error '+str(e) +
+                              ' con POST y ' + ticker)
                         message.send(str(now), 'Error '+str(e) +
-                                    ' con POST y ' + ticker)
+                                     ' con POST y ' + ticker)
 
             return mensaje
 
@@ -434,30 +409,31 @@ if __name__ == "__main__":
     def files():
         # {"crud":"crud","user":"user","key":"lajfo","secret":"iajdm"}
         if request.method == 'POST':
-            mensaje=''
+            mensaje = ''
             reception = request.json
             security = Security()
-            key = security.decrypt_api(reception['key'])#reception['key']
-            secret = security.decrypt_api(reception['secret'])#reception['secret']
+            key = security.decrypt_api(reception['key'])  # reception['key']
+            secret = security.decrypt_api(
+                reception['secret'])  # reception['secret']
             if reception['crud'] == "create" or reception['crud'] == "update":
                 with open('users.json') as json_file:
                     users_post = load(json_file)
                     users_post[reception['user']] = {'key': key,
-                                                'secret': secret}
-                mensaje='create sucessfully'
+                                                     'secret': secret}
+                mensaje = 'create sucessfully'
             if reception['crud'] == "delete":
                 with open('users.json') as json_file:
                     users_post = load(json_file)
                     users_post.pop(reception['user'])
-                mensaje='delete sucessfully'
+                mensaje = 'delete sucessfully'
 
             with open("users.json", "w") as write_file:
-                dump(users_post, write_file,indent=4,separators=(',',': '))
+                dump(users_post, write_file, indent=4, separators=(',', ': '))
 
             return mensaje
 
-    app.run(host='localhost', port=8080)
-    #serve(app, host='0.0.0.0', port=80, url_scheme='https')
+    #app.run(host='localhost', port=8080)
+    serve(app, host='0.0.0.0', port=80, url_scheme='https')
 # ----------json recepción
 '''
 crud
