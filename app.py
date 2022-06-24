@@ -15,15 +15,10 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from base64 import urlsafe_b64encode
 # -----------------Variables globales-----------------------
 
-balance = 0.0
-list_symbols = ['BTCUSDT', 'LTCUSDT', 'ETHUSDT', 'BNBUSDT']
 list_objects = []
 #users----{'raul':{'key':'hsdfljqr','secret':'jifwerc'},...}
-with open('coins.json') as json_file:
-    symbols = load(json_file)
 
 # ------------------clase cliente--------------------
-
 
 class Cliente:
     """
@@ -36,7 +31,6 @@ class Cliente:
         self.client = Client(self.apis['key'],self.apis['secret'])
 
 # -------------------Clase mensaje
-
 
 class Mensaje:
     '''
@@ -52,7 +46,6 @@ class Mensaje:
 
 # --------------------Clase ordenes---------
 
-
 class Ordenes:
     '''Esta clase es la que recibe todo y envía ordenes cacelaciones, etc.'''
 
@@ -64,75 +57,70 @@ class Ordenes:
         '''Creación de la orden que llega desde el webhook'''
         quan_before = 0.0
 
-        if symbols[self.cliente.symbol]['quantity'] != 0:
-            quan_before = float(symbols[self.cliente.symbol]['quantity'])
-
-        if symbols[self.cliente.symbol]['leverage'] != leverage:
-            symbols[self.cliente.symbol]['leverage'] = leverage
-
-            if symbols[self.cliente.symbol]['side'] == position:
-                self.cliente.client.futures_change_leverage(
-                    symbol=symbols[self.cliente.symbol]['symbol'], leverage=leverage)
-
-            elif quan_before != 0.0:
+        if update.symbols[self.cliente.symbol]['quantity'] != 0:
+            quan_before = float(update.symbols[self.cliente.symbol]['quantity'])
+        #print(position,close,leverage)
+        #print(update.list_symbols,update.users,update.claves)
+        
+        if update.symbols[self.cliente.symbol]['leverage'] != leverage:                            
+            if quan_before != 0.0:
                 try:
                     '''Weight:1'''
                     order = self.cliente.client.futures_create_order(
-                        symbol=symbols[self.cliente.symbol]['symbol'],
+                        symbol=update.symbols[self.cliente.symbol]['symbol'],
                         side=position,
                         type='MARKET',
-                        quantity=str(quan_before)[0:symbols[self.cliente.symbol]["accuracy"]])
+                        quantity=str(quan_before)[0:update.symbols[self.cliente.symbol]["accuracy"]])
                     sleep(0.1)
                     quan_before = 0.0
                 except Exception as e:
-                    print(symbols[self.cliente.symbol]['symbol'], position, 'MARKET', str(
-                        quantity_n)[0:symbols[self.cliente.symbol]["accuracy"]])
-                    self.message.send('El error en compra fue '+str(e))
+                    print(update.symbols[self.cliente.symbol]['symbol'], position, 'MARKET', str(
+                        quantity_n)[0:update.symbols[self.cliente.symbol]["accuracy"]])
+                    self.message.send('El error en cierre '+str(e))
                 '''Weight:1'''
-                self.cliente.client.futures_change_leverage(
-                    symbol=symbols[self.cliente.symbol]['symbol'], leverage=leverage)
-                symbols[self.cliente.symbol]['leverage'] = leverage
+            self.cliente.client.futures_change_leverage(symbol=update.symbols[self.cliente.symbol]['symbol'], leverage=leverage)
+            update.symbols[self.cliente.symbol]['leverage'] = leverage
 
         balance = update.balance
-        quantity_n = str(((balance/4)*symbols[self.cliente.symbol]['leverage'])/float(
-            close))[0:symbols[self.cliente.symbol]["accuracy"]]
+        quantity_n = str(((balance/4)*update.symbols[self.cliente.symbol]['leverage'])/float(
+            close))[0:update.symbols[self.cliente.symbol]["accuracy"]]
 
-        if symbols[self.cliente.symbol]['id'] != 0:
+        if update.symbols[self.cliente.symbol]['id'] != 0:
             quantity_n = str(float(quantity_n)+quan_before)
         try:
             '''Weight:1'''
             order = self.cliente.client.futures_create_order(
-                symbol=symbols[self.cliente.symbol]['symbol'],
+                symbol=update.symbols[self.cliente.symbol]['symbol'],
                 side=position,
                 type='MARKET',
-                quantity=str(quantity_n)[0:symbols[self.cliente.symbol]["accuracy"]])
+                quantity=str(quantity_n)[0:update.symbols[self.cliente.symbol]["accuracy"]])
         except Exception as e:
-            print(symbols[self.cliente.symbol]['symbol'], position, 'MARKET', str(
-                quantity_n)[0:symbols[self.cliente.symbol]["accuracy"]])
+            print(update.symbols[self.cliente.symbol]['symbol'], position, 'MARKET', str(
+                quantity_n)[0:update.symbols[self.cliente.symbol]["accuracy"]])
             self.message.send('El error en compra fue '+str(e))
             order['orderId'] = 0
-
+        
         sleep(1)
         while True:
             try:
                 '''Weight:1'''
                 self.cliente.client.futures_cancel_all_open_orders(
-                    symbol=symbols[self.cliente.symbol]['symbol'])
+                    symbol=update.symbols[self.cliente.symbol]['symbol'])
                 sleep(0.5)
                 '''Weight:5'''
                 posicion = self.cliente.client.futures_position_information(
-                    symbol=symbols[self.cliente.symbol]['symbol'])[0]['positionAmt']
+                    symbol=update.symbols[self.cliente.symbol]['symbol'])[0]['positionAmt']
                 break
             except:
-                print(symbols[self.cliente.symbol]['symbol'], position, 'MARKET', str(
-                    quantity_n)[0:symbols[self.cliente.symbol]["accuracy"]])
+                print(update.symbols[self.cliente.symbol]['symbol'], position, 'MARKET', str(
+                    quantity_n)[0:update.symbols[self.cliente.symbol]["accuracy"]])
                 self.message.send('El error en compra fue '+str(e))
                 order['orderId'] = 0
 
-        symbols[self.cliente.symbol]['quantity'] = abs(float(posicion))
-        symbols[self.cliente.symbol]['id'] = order['orderId']
+        update.symbols[self.cliente.symbol]['quantity'] = abs(float(posicion))
+        update.symbols[self.cliente.symbol]['id'] = order['orderId']
         order_exe = Thread(target=self.create_order_exe, args=(
-            symbols[self.cliente.symbol]['id'], 'create',))
+            update.symbols[self.cliente.symbol]['id'], 'create',))
         order_exe.start()
 
     def stop_loss(self, position: str):
@@ -140,30 +128,30 @@ class Ordenes:
         if position == 'BUY':
             pos = 'SELL'
             stop = round(
-                symbols[self.cliente.symbol]['price']*(1.002-symbols[self.cliente.symbol]['stop_l']), symbols[self.cliente.symbol]["round"])
+                update.symbols[self.cliente.symbol]['price']*(1.002-update.symbols[self.cliente.symbol]['stop_l']), symbols[self.cliente.symbol]["round"])
             price = round(
-                symbols[self.cliente.symbol]['price']*(1-symbols[self.cliente.symbol]['stop_l']), symbols[self.cliente.symbol]["round"])
+                update.symbols[self.cliente.symbol]['price']*(1-update.symbols[self.cliente.symbol]['stop_l']), symbols[self.cliente.symbol]["round"])
         elif position == 'SELL':
             pos = 'BUY'
             stop = round(
-                symbols[self.cliente.symbol]['price']*(0.998+symbols[self.cliente.symbol]['stop_s']), symbols[self.cliente.symbol]["round"])
+                update.symbols[self.cliente.symbol]['price']*(0.998+update.symbols[self.cliente.symbol]['stop_s']), symbols[self.cliente.symbol]["round"])
             price = round(
-                symbols[self.cliente.symbol]['price']*(1+symbols[self.cliente.symbol]['stop_s']), symbols[self.cliente.symbol]["round"])
+                update.symbols[self.cliente.symbol]['price']*(1+update.symbols[self.cliente.symbol]['stop_s']), symbols[self.cliente.symbol]["round"])
 
         try:
             '''Weight:1'''
             loss = self.cliente.client.futures_create_order(
-                symbol=symbols[self.cliente.symbol]['symbol'],
+                symbol=update.symbols[self.cliente.symbol]['symbol'],
                 side=pos,
                 type='STOP',
-                quantity=symbols[self.cliente.symbol]['quantity'],
+                quantity=update.symbols[self.cliente.symbol]['quantity'],
                 price=price,
                 stopPrice=stop,
                 reduceOnly=True
             )
         except Exception as e:
-            print(symbols[self.cliente.symbol]['symbol'], pos, 'STOP',
-                  symbols[self.cliente.symbol]['quantity'], price, stop,)
+            print(update.symbols[self.cliente.symbol]['symbol'], pos, 'STOP',
+                  update.symbols[self.cliente.symbol]['quantity'], price, stop,)
             self.message.send('El error en stop fue '+str(e))
         order_exe = Thread(target=self.create_order_exe,
                            args=(loss['orderId'], 'stop',))
@@ -175,29 +163,29 @@ class Ordenes:
         if position == 'BUY':
             pos = 'SELL'
             stop = round(
-                symbols[self.cliente.symbol]['price']*(0.998+symbols[self.cliente.symbol]['take_l']), symbols[self.cliente.symbol]["round"])
+                update.symbols[self.cliente.symbol]['price']*(0.998+update.symbols[self.cliente.symbol]['take_l']), update.symbols[self.cliente.symbol]["round"])
             price = round(
-                symbols[self.cliente.symbol]['price']*(1+symbols[self.cliente.symbol]['take_l']), symbols[self.cliente.symbol]["round"])
+                update.symbols[self.cliente.symbol]['price']*(1+update.symbols[self.cliente.symbol]['take_l']), update.symbols[self.cliente.symbol]["round"])
         elif position == 'SELL':
             pos = 'BUY'
             stop = round(
-                symbols[self.cliente.symbol]['price']*(1.002-symbols[self.cliente.symbol]['take_s']), symbols[self.cliente.symbol]["round"])
+                update.symbols[self.cliente.symbol]['price']*(1.002-update.symbols[self.cliente.symbol]['take_s']), update.symbols[self.cliente.symbol]["round"])
             price = round(
-                symbols[self.cliente.symbol]['price']*(1-symbols[self.cliente.symbol]['take_s']), symbols[self.cliente.symbol]["round"])
+                update.symbols[self.cliente.symbol]['price']*(1-update.symbols[self.cliente.symbol]['take_s']), update.symbols[self.cliente.symbol]["round"])
         try:
             '''Weight:1'''
             take = self.cliente.client.futures_create_order(
-                symbol=symbols[self.cliente.symbol]['symbol'],
+                symbol=update.symbols[self.cliente.symbol]['symbol'],
                 side=pos,
                 type='TAKE_PROFIT',
-                quantity=symbols[self.cliente.symbol]['quantity'],
+                quantity=update.symbols[self.cliente.symbol]['quantity'],
                 price=price,
                 stopPrice=stop,
                 reduceOnly=True
             )
         except Exception as e:
-            print(symbols[self.cliente.symbol]['symbol'], pos, 'STOP',
-                  symbols[self.cliente.symbol]['quantity'], price, stop)
+            print(update.symbols[self.cliente.symbol]['symbol'], pos, 'STOP',
+                  update.symbols[self.cliente.symbol]['quantity'], price, stop)
             self.message.send('El error en take fue '+str(e))
         order_exe = Thread(target=self.create_order_exe,
                            args=(take['orderId'], 'take',))
@@ -213,70 +201,70 @@ class Ordenes:
                     '''Weight:1'''
                     order = self.cliente.client.futures_get_order(
                         orderId=order_id, symbol=symbols[self.cliente.symbol]['symbol'])
-                    symbols[self.cliente.symbol]['id'] = order['orderId']
-                    symbols[self.cliente.symbol]['side'] = order['side']
+                    update.symbols[self.cliente.symbol]['id'] = order['orderId']
+                    update.symbols[self.cliente.symbol]['side'] = order['side']
                     break
                 except Exception as e:
                     posicion = self.cliente.client.futures_position_information(
-                        symbol=symbols[self.cliente.symbol]['symbol'])[0]['positionAmt']
-                    symbols[self.cliente.symbol]['quantity'] = abs(
+                        symbol=update.symbols[self.cliente.symbol]['symbol'])[0]['positionAmt']
+                    update.symbols[self.cliente.symbol]['quantity'] = abs(
                         float(posicion))
                     now = dt.datetime.now(tz=dt.timezone(offset=dt.timedelta(
                         hours=-5))).replace(microsecond=0).isoformat()
                     print(str(now), 'Error '+str(e)+' con '+intro+' y ' +
-                          symbols[self.cliente.symbol]['symbol'], order_id)
+                          update.symbols[self.cliente.symbol]['symbol'], order_id)
                     self.message.send('Error '+str(e)+' con '+intro+' y ' +
-                                      symbols[self.cliente.symbol]['symbol']+' '+str(order_id))
+                                      update.symbols[self.cliente.symbol]['symbol']+' '+str(order_id))
                 sleep(5)
 
             if (order['status'] == 'FILLED' and intro == 'create'):
-                symbols[self.cliente.symbol]['price'] = float(
+                update.symbols[self.cliente.symbol]['price'] = float(
                     order['avgPrice'])
-                symbols[self.cliente.symbol]['quote'] = float(
+                update.symbols[self.cliente.symbol]['quote'] = float(
                     order['cumQuote'])*0.9996
                 price_stop = self.stop_loss(
-                    symbols[self.cliente.symbol]['side'])
+                    update.symbols[self.cliente.symbol]['side'])
                 price_take = self.take_profit(
-                    symbols[self.cliente.symbol]['side'])
-                self.message.send(order['side']+' en '+symbols[self.cliente.symbol]['symbol']+' a ' + str(
-                    symbols[self.cliente.symbol]["price"])+' con sl de '+str(price_stop)+' y tp de '+str(price_take))
+                    update.symbols[self.cliente.symbol]['side'])
+                self.message.send(order['side']+' en '+update.symbols[self.cliente.symbol]['symbol']+' a ' + str(
+                    update.symbols[self.cliente.symbol]["price"])+' con sl de '+str(price_stop)+' y tp de '+str(price_take))
                 now = dt.datetime.now(tz=dt.timezone(offset=dt.timedelta(
                     hours=-5))).replace(microsecond=0).isoformat()
-                print(str(now), order['side']+' en '+symbols[self.cliente.symbol]['symbol']+' a ' + str(
-                    symbols[self.cliente.symbol]["price"])+' con sl de '+str(price_stop)+' y tp de '+str(price_take))
+                print(str(now), order['side']+' en '+update.symbols[self.cliente.symbol]['symbol']+' a ' + str(
+                    update.symbols[self.cliente.symbol]["price"])+' con sl de '+str(price_stop)+' y tp de '+str(price_take))
                 break
 
             if (order['status'] == 'FILLED' and intro == 'stop'):
                 '''Weight:1'''
                 self.cliente.client.futures_cancel_all_open_orders(
-                    symbol=symbols[self.cliente.symbol]['symbol'])
-                symbols[self.cliente.symbol]['id'] = 0
-                symbols[self.cliente.symbol]['quantity'] = 0.0
+                    symbol=update.symbols[self.cliente.symbol]['symbol'])
+                update.symbols[self.cliente.symbol]['id'] = 0
+                update.symbols[self.cliente.symbol]['quantity'] = 0.0
                 self.message.send('Se tomo el sl de ' +
-                                  symbols[self.cliente.symbol]['symbol'])
+                                  update.symbols[self.cliente.symbol]['symbol'])
                 now = dt.datetime.now(tz=dt.timezone(offset=dt.timedelta(
                     hours=-5))).replace(microsecond=0).isoformat()
                 print(str(now), 'Se tomo el sl de ' +
-                      symbols[self.cliente.symbol]['symbol'])
+                      update.symbols[self.cliente.symbol]['symbol'])
                 break
 
             if (order['status'] == 'FILLED' and intro == 'take'):
                 '''Weight:1'''
                 self.cliente.client.futures_cancel_all_open_orders(
-                    symbol=symbols[self.cliente.symbol]['symbol'])
-                symbols[self.cliente.symbol]['id'] = 0
-                symbols[self.cliente.symbol]['quantity'] = 0.0
+                    symbol=update.symbols[self.cliente.symbol]['symbol'])
+                update.symbols[self.cliente.symbol]['id'] = 0
+                update.symbols[self.cliente.symbol]['quantity'] = 0.0
                 self.message.send('Se tomo el tp de ' +
-                                  symbols[self.cliente.symbol]['symbol'])
+                                  update.symbols[self.cliente.symbol]['symbol'])
                 now = dt.datetime.now(tz=dt.timezone(offset=dt.timedelta(
                     hours=-5))).replace(microsecond=0).isoformat()
                 print(str(now), 'Se tomo el tp de ' +
-                      symbols[self.cliente.symbol]['symbol'])
+                      update.symbols[self.cliente.symbol]['symbol'])
                 break
             if order['status'] == 'CANCELED':
                 '''Weight:1'''
                 self.cliente.client.futures_cancel_all_open_orders(
-                    symbol=symbols[self.cliente.symbol]['symbol'])
+                    symbol=update.symbols[self.cliente.symbol]['symbol'])
                 break
 
             sleep(0.5)
@@ -290,9 +278,17 @@ class All_time:
         self.hour_before = dt.datetime.now().hour
         self.message = Mensaje()
         self.balance = 0.0
+        self.list_symbols=[]
+        self.symbols={}
+        with open("coins.json") as js:
+            self.symbols = load(js)
+            self.list_symbols=(list(self.symbols.keys()))
         self.claves={}
         self.users=[]
-        self.inicio()
+        with open('users.json') as json_file:
+            self.claves = load(json_file)
+            self.users=(list(self.claves.keys()))
+        #self.inicio()
         self.thread = Thread(target=self.hora)
         self.thread.start()
     
@@ -313,8 +309,7 @@ class All_time:
                 if len(list_objects) > 5:
                     list_objects.pop(0)
                 with open("coins.json", "w") as write_file:
-                    dump(symbols, write_file)
-
+                    dump(self.symbols, write_file)
                 with open('users.json') as json_file:
                     self.claves = load(json_file)
                     self.users=(list(self.claves.keys()))
@@ -322,7 +317,7 @@ class All_time:
 
     def inicio(self):
         '''Envío de mensaje al grupo de Telegram del saldo inicial'''
-        cliente = Cliente('BNBUSDT')
+        cliente = Cliente('BNBUSDT','shercan')
         '''weight:5'''
         list_balance = cliente.client.futures_account_balance()
         self.balance = float([x['balance']
@@ -360,42 +355,41 @@ class Security:
 # -----------------------------------inicio de programa
 if __name__ == "__main__":
     from waitress import serve
-    #cliente = Cliente('BNBUSDT')
+    cliente = Cliente('BNBUSDT')
     update = All_time()
-    # for i in list_symbols:
-    #     try:
-    #         '''Weight:1'''
-    #         cliente.client.futures_change_leverage(
-    #             symbol=i, leverage=symbols[i]['leverage'])
-    #     except:
-    #         pass
-    #     '''Weight:5'''
-    #     info_coin = cliente.client.futures_position_information(symbol=i)
-    #     cant_pos = float(info_coin[0]['positionAmt'])
-    #     if cant_pos != 0:
-    #         '''Weight:1'''
-    #         cliente.client.futures_cancel_all_open_orders(symbol=i)
-    #         if cant_pos > 0:
-    #             symbols[i]['price'] = float(info_coin[0]['entryPrice'])
-    #             symbols[i]['quote'] = float(
-    #                 info_coin[0]['isolatedWallet'])*0.9996
-    #             symbols[i]['quantity'] = abs(cant_pos)
-    #             symbols[i]['id'] = 100
-    #             orders_before = Ordenes(i)
-    #             orders_before.stop_loss('BUY')
-    #             orders_before.take_profit('BUY')
-    #         else:
-    #             symbols[i]['price'] = float(info_coin[0]['entryPrice'])
-    #             symbols[i]['quantity'] = abs(cant_pos)
-    #             symbols[i]['id'] = 100
-    #             orders_before = Ordenes(i)
-    #             orders_before.stop_loss('SELL')
-    #             orders_before.take_profit('SELL')
-    #now = dt.datetime.now(tz=dt.timezone(offset=dt.timedelta(
-    #     hours=-5))).replace(microsecond=0).isoformat()
-    #print('Inicio', str(update.balance), str(now))
-    #del cliente
-
+    for i in update.list_symbols:
+        try:
+            '''Weight:1'''
+            cliente.client.futures_change_leverage(
+                symbol=i, leverage=update.symbols[i]['leverage'])
+        except:
+            pass
+        '''Weight:5'''
+        info_coin = cliente.client.futures_position_information(symbol=i)
+        cant_pos = float(info_coin[0]['positionAmt'])
+        if cant_pos != 0:
+            '''Weight:1'''
+            cliente.client.futures_cancel_all_open_orders(symbol=i)
+            if cant_pos > 0:
+                update.symbols[i]['price'] = float(info_coin[0]['entryPrice'])
+                update.symbols[i]['quote'] = float(
+                    info_coin[0]['isolatedWallet'])*0.9996
+                update.symbols[i]['quantity'] = abs(cant_pos)
+                update.symbols[i]['id'] = 100
+                orders_before = Ordenes(i)
+                orders_before.stop_loss('BUY')
+                orders_before.take_profit('BUY')
+            else:
+                update.symbols[i]['price'] = float(info_coin[0]['entryPrice'])
+                update.symbols[i]['quantity'] = abs(cant_pos)
+                update.symbols[i]['id'] = 100
+                orders_before = Ordenes(i)
+                orders_before.stop_loss('SELL')
+                orders_before.take_profit('SELL')
+    now = dt.datetime.now(tz=dt.timezone(offset=dt.timedelta(
+        hours=-5))).replace(microsecond=0).isoformat()
+    print('Inicio', str(update.balance), str(now))
+    del cliente
 # -----INICIO DEL BACKEND------
     app = Flask(__name__)
 
@@ -410,15 +404,17 @@ if __name__ == "__main__":
         if request.method == 'POST':
             recive = request.json
             ticker = recive['ticker'].replace('PERP', '')
-            if ((list_symbols.count(ticker) > 0 and recive['cod'] == "techmasters")
+            print(recive)
+            if ((update.list_symbols.count(ticker) > 0 and recive['cod'] == "techmasters")
              and (recive['position'] == 'short' or recive['position'] == 'long')):
+                print('entro')
                 for i in update.users:
                     list_objects.append(Ordenes(ticker,i))
                     try:
                         leverage = recive["leverage"]
                     except:
-                        leverage = symbols[ticker]['leverage']
-                        print(leverage,symbols[ticker]['leverage'],recive["leverage"])
+                        leverage = update.symbols[ticker]['leverage']
+                        print(leverage,update.symbols[ticker]['leverage'],recive["leverage"])
                     try:
                         list_objects[-1].create_order(recive['order'].upper(),
                                                     recive['price'], int(leverage))
@@ -441,8 +437,8 @@ if __name__ == "__main__":
             mensaje=''
             reception = request.json
             security = Security()
-            key =reception['key'] #security.decrypt_api(reception['key'])
-            secret =reception['secret'] #security.decrypt_api(reception['secret'])
+            key = security.decrypt_api(reception['key'])#reception['key']
+            secret = security.decrypt_api(reception['secret'])#reception['secret']
             if reception['crud'] == "create" or reception['crud'] == "update":
                 with open('users.json') as json_file:
                     users_post = load(json_file)
@@ -456,11 +452,11 @@ if __name__ == "__main__":
                 mensaje='delete sucessfully'
 
             with open("users.json", "w") as write_file:
-                dump(users, write_file)
+                dump(users_post, write_file,indent=4,separators=(',',': '))
 
             return mensaje
 
-    app.run(host='127.0.0.1', port=80)
+    app.run(host='localhost', port=8080)
     #serve(app, host='0.0.0.0', port=80, url_scheme='https')
 # ----------json recepción
 '''
