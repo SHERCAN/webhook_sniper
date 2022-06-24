@@ -5,3 +5,4 @@ webapp
 *.xlsx
 password.py
 __pycache__
+ordenes_anteriores.py
