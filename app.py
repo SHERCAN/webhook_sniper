@@ -128,15 +128,15 @@ class Ordenes:
         if position == 'BUY':
             pos = 'SELL'
             stop = round(
-                update.symbols[self.cliente.symbol]['price']*(1.002-update.symbols[self.cliente.symbol]['stop_l']), symbols[self.cliente.symbol]["round"])
+                update.symbols[self.cliente.symbol]['price']*(1.002-update.symbols[self.cliente.symbol]['stop_l']), update.symbols[self.cliente.symbol]["round"])
             price = round(
-                update.symbols[self.cliente.symbol]['price']*(1-update.symbols[self.cliente.symbol]['stop_l']), symbols[self.cliente.symbol]["round"])
+                update.symbols[self.cliente.symbol]['price']*(1-update.symbols[self.cliente.symbol]['stop_l']), update.symbols[self.cliente.symbol]["round"])
         elif position == 'SELL':
             pos = 'BUY'
             stop = round(
-                update.symbols[self.cliente.symbol]['price']*(0.998+update.symbols[self.cliente.symbol]['stop_s']), symbols[self.cliente.symbol]["round"])
+                update.symbols[self.cliente.symbol]['price']*(0.998+update.symbols[self.cliente.symbol]['stop_s']), update.symbols[self.cliente.symbol]["round"])
             price = round(
-                update.symbols[self.cliente.symbol]['price']*(1+update.symbols[self.cliente.symbol]['stop_s']), symbols[self.cliente.symbol]["round"])
+                update.symbols[self.cliente.symbol]['price']*(1+update.symbols[self.cliente.symbol]['stop_s']), update.symbols[self.cliente.symbol]["round"])
 
         try:
             '''Weight:1'''
@@ -200,7 +200,7 @@ class Ordenes:
                 try:
                     '''Weight:1'''
                     order = self.cliente.client.futures_get_order(
-                        orderId=order_id, symbol=symbols[self.cliente.symbol]['symbol'])
+                        orderId=order_id, symbol=update.symbols[self.cliente.symbol]['symbol'])
                     update.symbols[self.cliente.symbol]['id'] = order['orderId']
                     update.symbols[self.cliente.symbol]['side'] = order['side']
                     break
