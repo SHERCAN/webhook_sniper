@@ -1,4 +1,4 @@
-# modules-----------------------------
+#-------------------------------------modules-----------------------------
 import sys
 from password import *
 from threading import Thread
@@ -59,6 +59,13 @@ class All_time:
             for i in self.list_symbols:
                 '''weight:1'''
                 cliente.futures_change_leverage(symbol=i, leverage=self.symbols[i]['leverage'])
+                '''
+                -----------------------------------
+                ----------------------------------
+                poner el cambio de de aislado y cruzado.
+                ----------------------------------
+                --------------------------------
+                '''
                 pass
         self.balance=lista_balances.copy()
         self.message.send(f'Tu balance es de {round(self.balance[0],2)} USDT')
@@ -121,7 +128,8 @@ class Ordenes:
             update.accounts[self.id][self.symbol]['quantity']!= 0
         except:
             update.accounts[self.id]={}
-            update.accounts[self.id].update({self.symbol:{'quantity':0,'id':0,'side':''}})
+            update.accounts[self.id].update({self.symbol:{'quantity':0,'id':0,
+            'side':'','leverage':1}})
 
     def create_order(self, position: str, close: str, leverage: int = 2):
         '''Creación de la orden que llega desde el webhook'''
@@ -134,7 +142,7 @@ class Ordenes:
         if update.accounts[self.id][self.symbol]['quantity'] != 0:
             self.quan_before = float(update.accounts[self.id][self.symbol]['quantity'])
 
-        if update.symbols[self.cliente.symbol]['leverage'] != self.leverage:
+        if update.accounts[self.id][self.symbol]['leverage'] != self.leverage:
             if self.quan_before != 0.0 and self.position!=update.accounts[self.id][self.symbol]['side']:
                 try:
                     '''Weight:1'''
@@ -149,14 +157,16 @@ class Ordenes:
                 except Exception as e:
                     print(update.symbols[self.cliente.symbol]['symbol'], self.position, 'MARKET', str(
                         self.quantity_n)[0:update.symbols[self.cliente.symbol]["accuracy"]])
-                    self.message.send('El error en cierre '+str(e))
+                    if self.id=="742390776":
+                        self.message.send('El error en cierre '+str(e))
                 '''Weight:1'''
             res=self.cliente.client.futures_change_leverage(symbol=update.symbols[self.cliente.symbol]['symbol'], leverage=self.leverage)
-            print('leverage',update.symbols[self.cliente.symbol]['symbol'],res['leverage'])
-            update.symbols[self.cliente.symbol]['leverage'] = self.leverage
-
+            #print('leverage',update.symbols[self.cliente.symbol]['symbol'],res['leverage'])
+            update.accounts[self.id][self.symbol]['leverage'] = int(res['leverage'])
+        '''----------------------------------------------------
+        revisión saldos-----------------------------------------'''
         self.balance = update.balance[update.users.index(self.id)]
-        self.quantity_n = str(((self.balance/4)*update.symbols[self.cliente.symbol]['leverage'])/float(
+        self.quantity_n = str(((self.balance/4)*update.accounts[self.id][self.symbol]['leverage'])/float(
             self.close))[0:update.symbols[self.cliente.symbol]["accuracy"]]
 
         if update.accounts[self.id][self.symbol]['id'] != 0:
@@ -171,7 +181,8 @@ class Ordenes:
         except Exception as e:
             print(update.symbols[self.cliente.symbol]['symbol'], self.position, 'MARKET', str(
                 self.quantity_n)[0:update.symbols[self.cliente.symbol]["accuracy"]])
-            self.message.send('El error en compra fue '+str(e))
+            if self.id=="742390776":
+                self.message.send('El error en compra fue '+str(e))
             self.order['orderId'] = 0
 
         if self.order['orderId']!=0:
@@ -183,13 +194,13 @@ class Ordenes:
                         symbol=update.symbols[self.cliente.symbol]['symbol'])
                     sleep(0.5)
                     '''Weight:5'''
-                    self.posicion = self.cliente.client.futures_position_information(
-                        symbol=update.symbols[self.cliente.symbol]['symbol'])[0]['positionAmt']
+                    self.posicion = self.cliente.client.futures_position_information(symbol=update.symbols[self.cliente.symbol]['symbol'])[0]['positionAmt']
                     break
                 except:
                     print(update.symbols[self.cliente.symbol]['symbol'], self.position, 'MARKET', str(
                         self.quantity_n)[0:update.symbols[self.cliente.symbol]["accuracy"]])
-                    self.message.send('El error en compra fue '+str(e))
+                    if self.id=="742390776":
+                        self.message.send('El error en compra fue '+str(e))
                     self.order['orderId'] = 0
                     break
             update.accounts[self.id][self.symbol]['quantity'] = abs(float(self.posicion))
@@ -226,7 +237,8 @@ class Ordenes:
         except Exception as e:
             print(update.symbols[self.cliente.symbol]['symbol'], self.pos, 'STOP',
                   update.accounts[self.id][self.symbol]['quantity'], self.price, self.stop,)
-            self.message.send('El error en stop fue '+str(e))
+            if self.id=="742390776":
+                self.message.send('El error en stop fue '+str(e))
         order_exe = Thread(target=self.create_order_exe,
                            args=(self.loss['orderId'], 'stop',))
         order_exe.start()
@@ -261,7 +273,8 @@ class Ordenes:
         except Exception as e:
             print(update.symbols[self.cliente.symbol]['symbol'], self.pos, 'STOP',
                   update.accounts[self.id][self.symbol]['quantity'], self.price, self.stop)
-            self.message.send('El error en take fue '+str(e))
+            if self.id=="742390776":
+                self.message.send('El error en take fue '+str(e))
         order_exe = Thread(target=self.create_order_exe,
                            args=(self.take['orderId'], 'take',))
         order_exe.start()
@@ -283,14 +296,14 @@ class Ordenes:
                     break
                 except Exception as e:
                     '''Weight:5'''
-                    posicion = self.cliente.client.futures_position_information(
-                        symbol=update.symbols[self.cliente.symbol]['symbol'])[0]['positionAmt']
-                    update.accounts[self.id][self.symbol]['quantity'] = abs(float(posicion))
+                    #posicion = self.cliente.client.futures_position_information(symbol=update.symbols[self.cliente.symbol]['symbol'])[0]['positionAmt']
+                    #update.accounts[self.id][self.symbol]['quantity'] = abs(float(posicion))
                     now = dt.datetime.now(tz=dt.timezone(offset=dt.timedelta(
                         hours=-5))).replace(microsecond=0).isoformat()
                     print(str(now), 'Error '+str(e)+' con '+self.intro+' y ' +
                           update.symbols[self.cliente.symbol]['symbol'], self.order_id)
-                    self.message.send('Error '+str(e)+' con '+self.intro+' y ' +
+                    if self.id=="742390776":
+                        self.message.send('Error '+str(e)+' con '+self.intro+' y ' +
                                       update.symbols[self.cliente.symbol]['symbol']+' '+str(self.order_id))
                 sleep(5)
 
@@ -302,7 +315,7 @@ class Ordenes:
                 price_take = self.take_profit(create_tp_sl)
                 sleep(10.5)
                 price_stop = self.stop_loss(create_tp_sl)    
-                msm=self.order['side']+' en '+update.symbols[self.cliente.symbol]['symbol']+' a ' + str(
+                msm=create_tp_sl+' en '+update.symbols[self.cliente.symbol]['symbol']+' a ' + str(
                     update.accounts[self.id][self.symbol]["price"])+' con sl de '+str(price_stop)+' y tp de '+str(price_take)                    
                 '''-----------------------------------------------------posicion envio mensaje----------
                 ----------------------------------------------------------------------------------------
@@ -342,7 +355,7 @@ class Ordenes:
                 -----------------------------------------------------------------------'''
                 msm='Se tomo el tp de ' + update.symbols[self.cliente.symbol]['symbol']
                 if self.id=="742390776":
-                    self.message.send()
+                    self.message.send(msm)
                 now = dt.datetime.now(tz=dt.timezone(offset=dt.timedelta(
                     hours=-5))).replace(microsecond=0).isoformat()
                 print(str(now),msm)
@@ -409,22 +422,23 @@ if __name__ == "__main__":
                     and (recive['position'] == 'short' or recive['position'] == 'long')):
                 for i in update.users:
                     update.list_objects.append(Ordenes(ticker, i))
-                    print(ticker,i)
+                    #print(ticker,i)
                     try:
                         leverage = recive["leverage"]
                     except:
                         leverage = update.symbols[ticker]['leverage']
-                        print(leverage, update.symbols[ticker]['leverage'], recive["leverage"])
+                        #print(leverage, update.accounts[i][ticker]['leverage'], recive["leverage"])
                     try:
                         update.list_objects[-1].create_order(recive['order'].upper(),recive['price'], int(leverage))
                         mensaje = 'Se realizo una orden en ' + \
                             str(recive['position']) +' '+ str(ticker)
-                        message.send(mensaje+ ' '+ recive['price'])
+                        #message.send(mensaje+ ' '+ recive['price'])
                     except Exception as e:
                         now = dt.datetime.now(tz=dt.timezone(offset=dt.timedelta(
                             hours=-5))).replace(microsecond=0).isoformat()
                         print(str(now), 'Error '+str(e) +' con POST y ' + ticker)
-                        message.send(str(now)+ 'Error '+str(e) +' con POST y ' + ticker)
+                        if i=="742390776":
+                            message.send(str(now)+ 'Error '+str(e) +' con POST y ' + ticker)
                 sleep(60)
 
         return mensaje
@@ -456,8 +470,8 @@ if __name__ == "__main__":
                     update.users = (list(users_json.keys()))
             return mensaje
 
-    app.run(host='localhost', port=8080)
-    #serve(app, host='0.0.0.0', port=80, url_scheme='https')
+    #app.run(host='localhost', port=8080)
+    serve(app, host='0.0.0.0', port=80, url_scheme='https')
 # ----------json recepción
 '''
 crud
